@@ -1,11 +1,74 @@
 ---
-title: "sbtn-SoN-water"
+title: "SBTN State of Nature Water unified layers"
+subtitle: "water availability and water pollution"
+author: "Rafael Camargo"
+date: "February 09, 2023"
+engine: knitr
+format:
+  html:
+    toc: true
+execute:
+  warning: false    
 ---
 
-## Quarto
+## Setup
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+Load required packages
 
 ```{r}
-1 + 1
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("dplyr", "magrittr", "sf", "raster")
+```
+
+## Load data
+
+```{r}
+my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_library/" 
+```
+
+### Water Availability
+
+```{r}
+# Water depletion (Brauman et al. 2016)
+wdp <- raster(paste0(my_lib, "WaterDepletion_WaterGap3/WaterDepletionCat_WG3.tif"))
+
+# Baseline water stress (Hofste et al. 2019)
+bws <- st_read(paste0(my_lib, "aqueduct30_V01_2019/baseline/annual/arcmap/y2019m07d12_aqueduct30_v01.gdb"), layer = "annual")
+
+# Blue water scarcity (Mekonnen & Hoekstra 2016)
+wsb <- raster(paste0(my_lib, "BlueWaterScarcity/WS_blue_monthly_rasters/WSbl_monthly_30m/ws_avg.tif"))
+```
+
+### Water Pollution
+
+```{r}
+# Coastal Eutrophication Potential (Hofste et al. 2019)
+cep <- bws
+
+# Water Quality Index (Damania et al. 2019)
+wqi <- raster(paste0(my_lib, "WorldBank_ML_Quality/Risk_index_ML_6_4_19.tif"))
+
+# Global Water Quality Database / Global Nutrient Yields Dataset (McDowell et al. 2020)
+# wqd <- st_read(paste0(my_lib, "freshwater_nutrient_enrichment/freshwater_nutrient_enrichment.gdb", layer = "?"))
+```
+
+### Aggregation unit
+
+```{r}
+# WMO Basins and Sub-Basins (GRDC 2020), only to add name of basins
+wmo_basins <- st_read(paste0(my_lib, "WMO_basins2020/wmobb_basins.shp")) %>%
+  dplyr::select(WMOBB_id = WMOBB, WMOBB_name = WMOBBName, region = REGNAME)
+
+# HydroSHEDS HydroBASINS Level 6 (Lehner & Grill 2013)
+sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
+h6 <- st_read(paste0(my_lib, "hydrosheds/hybas_lev06_v1c.shp")) %>%
+  dplyr::select(HYBAS_ID) %>%
+  mutate(HYBAS_ID = as.factor(HYBAS_ID)) %>%
+  st_join(wmo_basins, largest = TRUE)
+```
+
+Clean environment
+
+```{r}
+rm(my_lib, wmo_basins)
 ```
