@@ -17,58 +17,264 @@ Load required packages
 
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("dplyr", "magrittr", "sf", "raster")
+pacman::p_load("here", "dplyr", "magrittr", "sf", "raster", "exactextractr", "skimr", "readr")
 ```
+
 
 ## Load data
 
 ```{r}
-my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_library/" 
+my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_library" 
 ```
+
 
 ### Water Availability
 
+#### Baseline water stress (Hofste et al. 2019)
 ```{r}
-# Water depletion (Brauman et al. 2016)
-wdp <- raster(paste0(my_lib, "WaterDepletion_WaterGap3/WaterDepletionCat_WG3.tif"))
-
-# Baseline water stress (Hofste et al. 2019)
-bws <- st_read(paste0(my_lib, "aqueduct30_V01_2019/baseline/annual/arcmap/y2019m07d12_aqueduct30_v01.gdb"), layer = "annual")
-
-# Blue water scarcity (Mekonnen & Hoekstra 2016)
-wsb <- raster(paste0(my_lib, "BlueWaterScarcity/WS_blue_monthly_rasters/WSbl_monthly_30m/ws_avg.tif"))
+bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"),
+               layer = "annual") %>%
+  dplyr::select(string_id, aq30_id, pfaf_id, bws_raw:bws_label, geometry = Shape)
 ```
+
+#### Water depletion (Brauman et al. 2016)
+```{r}
+wdp <- raster(here(my_lib, "WaterDepletion_WaterGap3", "WaterDepletionCat_WG3.tif"))
+```
+
+#### Blue water scarcity (Mekonnen & Hoekstra 2016)
+```{r}
+wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl_monthly_30m", "ws_avg.tif"))
+```
+
 
 ### Water Pollution
 
+#### Coastal Eutrophication Potential (Hofste et al. 2019)
 ```{r}
-# Coastal Eutrophication Potential (Hofste et al. 2019)
-cep <- bws
-
-# Water Quality Index (Damania et al. 2019)
-wqi <- raster(paste0(my_lib, "WorldBank_ML_Quality/Risk_index_ML_6_4_19.tif"))
-
-# Global Water Quality Database / Global Nutrient Yields Dataset (McDowell et al. 2020)
-# wqd <- st_read(paste0(my_lib, "freshwater_nutrient_enrichment/freshwater_nutrient_enrichment.gdb", layer = "?"))
+cep <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"),
+               layer = "annual") %>%
+  dplyr::select(string_id, aq30_id, pfaf_id, cep_raw:cep_label, geometry = Shape)
 ```
+
+#### Water Quality Index (Damania et al. 2019)
+```{r}
+wqi <- raster(here(my_lib, "WorldBank_ML_Quality", "Risk_index_ML_6_4_19.tif"))
+```
+
+#### Global Water Quality Database / Global Nutrient Yields Dataset (McDowell et al. 2020)
+```{r}
+# wqd <- st_read(here(my_lib, "freshwater_nutrient_enrichment", "freshwater_nutrient_enrichment.gdb", layer = "?"))
+```
+
 
 ### Aggregation unit
 
+#### WMO Basins and Sub-Basins (GRDC 2020), only to add name of basins
 ```{r}
-# WMO Basins and Sub-Basins (GRDC 2020), only to add name of basins
-wmo_basins <- st_read(paste0(my_lib, "WMO_basins2020/wmobb_basins.shp")) %>%
+wmo_basins <- st_read(here(my_lib, "WMO_basins2020", "wmobb_basins.shp")) %>%
   dplyr::select(WMOBB_id = WMOBB, WMOBB_name = WMOBBName, region = REGNAME)
+```
 
-# HydroSHEDS HydroBASINS Level 6 (Lehner & Grill 2013)
+#### HydroSHEDS HydroBASINS Level 6 (Lehner & Grill 2013)
+```{r}
 sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
-h6 <- st_read(paste0(my_lib, "hydrosheds/hybas_lev06_v1c.shp")) %>%
+
+h6 <- st_read(here(my_lib, "hydrosheds", "hybas_lev06_v1c.shp")) %>%
   dplyr::select(HYBAS_ID) %>%
   mutate(HYBAS_ID = as.factor(HYBAS_ID)) %>%
   st_join(wmo_basins, largest = TRUE)
 ```
 
-Clean environment
+#### Export / Fast load
+```{r}
+# write_rds(h6, here("output", "h6.rds"))
+h6 <- read_rds(here("output", "h6.rds"))
+```
+
+
+## Clean environment
 
 ```{r}
 rm(my_lib, wmo_basins)
+```
+
+
+## Normalize data to 1-5 values
+
+#### Baseline water stress
+```{r}
+bws_n <- bws %>%
+  mutate(bws_n = if_else(bws_label == "Arid and Low Water Use", 5, bws_cat), .before = bws_label)
+```
+
+#### Water depletion
+```{r}
+# reclassification matrix
+wdp_rcl <- matrix(
+  c(
+    0,NA,
+    1,1, # <=5% annual depletion
+    2,2, # >5–25% annual depletion
+    5,3, # >25–75% annual depletion, Dry-Year
+    6,4, # >25–75% annual depletion, Seasonal
+    7,5, # >75–100% annual depletion
+    8,5  # >100% annual depletion
+  ),
+  ncol=2, byrow=TRUE
+)
+
+# reclassify
+wdp_n <- reclassify(wdp, wdp_rcl)
+
+wdp_stack <- stack(wdp, wdp_n)
+names(wdp_stack) <- c("wdp_cat", "wdp_n")
+
+rm(wdp_rcl)
+```
+
+```{r}
+wdp_n <- exact_extract(wdp_stack, h6, fun = c("majority", "coefficient_of_variation"), # use mean or 75th instead?
+                       append_cols = "HYBAS_ID", progress = TRUE) 
+
+skim(wdp_n)
+
+rm(wdp_stack)
+```
+
+```{r}
+wdp_n <- wdp_n %>%
+  mutate(
+    wdp_cat = majority.wdp_cat,
+    wdp_n = majority.wdp_n,
+    wdp_label = case_when(
+      wdp_cat == 1 ~ "<=5% annual depletion",
+      wdp_cat == 2 ~ ">5–25% annual depletion",
+      wdp_cat == 5 ~ ">25–75% annual depletion, Dry-Year",
+      wdp_cat == 6 ~ ">25–75% annual depletion, Seasonal",
+      wdp_cat == 7 ~ ">75–100% annual depletion",
+      wdp_cat == 8 ~ ">100% annual depletion"
+    ),
+    wdp_cov = coefficient_of_variation.wdp_n
+  ) %>%
+  dplyr::select(HYBAS_ID, wdp_cat:wdp_cov)
+```
+
+#### Blue water scarcity
+```{r}
+wsb_n <- exact_extract(wsb, h6, fun = c("mean", "stdev", "variance", "median", "coefficient_of_variation"),
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(wsb_n)
+
+filter(wsb_n, coefficient_of_variation > 1) %>% nrow()/nrow(wsb_n) # 28% of h6 basins show high variability
+```
+
+```{r}
+wsb_n <- wsb_n %>%
+  mutate(
+    wsb_n = case_when(
+      median <= 0.2 ~ 1,
+      between(median, 0.2, 1.0) ~ 2,
+      between(median, 1.0, 2.0) ~ 3,
+      between(median, 2.0, 5.0) ~ 4,
+      median > 5.0 ~ 5
+    ),
+    wsb_label = case_when(
+      wsb_n == 1 ~ "Very Low Blue Water Scarcity (<=0.2)",
+      wsb_n == 2 ~ "Low Blue Water Scarcity (>0.2-1.0)",
+      wsb_n == 3 ~ "Moderate Blue Water Scarcity (>1.0-2.0)",
+      wsb_n == 4 ~ "Significant Blue Water Scarcity (>2.0-5.0)",
+      wsb_n == 5 ~ "Severe Blue Water Scarcity (>5.0)"
+    ),
+    wsb_cov = coefficient_of_variation
+  ) %>%
+  dplyr::select(HYBAS_ID, wsb_n:wsb_cov)
+```
+
+#### Export / Fast load
+```{r}
+# write_rds(bws_n, here("output", "bws_n.rds"))
+# write_rds(wdp_n, here("output", "wdp_n.rds"))
+# write_rds(wsb_n, here("output", "wsb_n.rds"))
+```
+
+```{r}
+bws_n <- read_rds(here("output", "bws_n.rds"))
+wdp_n <- read_rds(here("output", "wdp_n.rds"))
+wsb_n <- read_rds(here("output", "wsb_n.rds"))
+```
+
+
+## Join datasets of Water Availability
+
+```{r}
+sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
+
+son_wa <- h6 %>%
+  st_join(bws_n, largest = TRUE) %>%
+  left_join(wdp_n, by = "HYBAS_ID") %>%
+  left_join(wsb_n, by = "HYBAS_ID")
+```
+
+```{r}
+son_wa %>%
+  st_drop_geometry %>%
+  skim()
+```
+
+### Calculate options of unified value
+```{r}
+son_wa <- son_wa %>%
+  rowwise %>%
+  mutate(
+    wa_min = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_avg = mean(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_med = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_75q = quantile(c(bws_n, wdp_n, wsb_n), probs = 0.75, na.rm = TRUE),
+    wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_diff = wa_max - wa_min,
+    .before = geometry
+  ) %>%
+  ungroup() %>%
+  mutate(n_nas = rowSums(is.na(dplyr::select(., all_of(c("bws_n", "wdp_n", "wsb_n"))))), .before = geometry)
+```
+
+### Explore the options
+```{r}
+son_wa %>%
+  dplyr::select(bws_n, wdp_n, wsb_n, wa_min:n_nas) %>%
+  st_drop_geometry %>%
+  skim()
+```
+
+```{r}
+son_wa %>%
+  st_drop_geometry %>%
+  group_by(wa_diff) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wa),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+```{r}
+son_wa %>%
+  st_drop_geometry %>%
+  group_by(n_nas) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wa),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+```{r}
+glimpse(son_wa)
+```
+
+### Export
+```{r}
+st_write(son_wa, here("output", "sbnt_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
