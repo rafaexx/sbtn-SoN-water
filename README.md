@@ -32,5 +32,5 @@ Read the columns of the output `sbnt_son_water.shp` as follow:
 | wa_max     | Maximum value between bws_n, wdp_n, wsb_n                                         |
 | wa_diff    | Maximum difference in value between bws_n, wdp_n, wsb_n                           |
 | wa_n\_nas  | Number of NAs between bws_n, wdp_n, wsb_n                                         |
-| wa_max_lyr | Layer(s) from which the value wa_max come(s)                                      |
-| wa_min_lyr | Layer(s) from which the value wa_min come(s)                                      |
+| wa_max_lyr | Layer(s) from which the value wa_max comes                                        |
+| wa_min_lyr | Layer(s) from which the value wa_min comes                                        |
