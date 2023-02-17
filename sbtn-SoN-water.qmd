@@ -12,21 +12,16 @@ execute:
 ---
 
 ## Setup
-
 Load required packages
-
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("here", "dplyr", "magrittr", "sf", "raster", "exactextractr", "skimr", "readr")
+pacman::p_load("here", "dplyr", "magrittr", "sf", "raster", "exactextractr", "skimr", "readr", "tidyr")
 ```
 
-
 ## Load data
-
 ```{r}
 my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_library" 
 ```
-
 
 ### Water Availability
 
@@ -47,7 +42,6 @@ wdp <- raster(here(my_lib, "WaterDepletion_WaterGap3", "WaterDepletionCat_WG3.ti
 wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl_monthly_30m", "ws_avg.tif"))
 ```
 
-
 ### Water Pollution
 
 #### Coastal Eutrophication Potential (Hofste et al. 2019)
@@ -66,7 +60,6 @@ wqi <- raster(here(my_lib, "WorldBank_ML_Quality", "Risk_index_ML_6_4_19.tif"))
 ```{r}
 # wqd <- st_read(here(my_lib, "freshwater_nutrient_enrichment", "freshwater_nutrient_enrichment.gdb", layer = "?"))
 ```
-
 
 ### Aggregation unit
 
@@ -92,24 +85,21 @@ h6 <- st_read(here(my_lib, "hydrosheds", "hybas_lev06_v1c.shp")) %>%
 h6 <- read_rds(here("output", "h6.rds"))
 ```
 
-
 ## Clean environment
-
 ```{r}
 rm(my_lib, wmo_basins)
 ```
 
-
 ## Normalize data to 1-5 values
 
-#### Baseline water stress
+### Baseline water stress
 ```{r}
 bws_n <- bws %>%
   mutate(bws_n = if_else(bws_label == "Arid and Low Water Use", 5, bws_cat), .before = bws_label) %>%
   dplyr::select(bws_raw, bws_n, bws_label)
 ```
 
-#### Water depletion
+### Water depletion
 ```{r}
 # reclassification matrix
 wdp_rcl <- matrix(
@@ -154,8 +144,7 @@ wdp_n <- wdp_n %>%
   dplyr::select(HYBAS_ID, wdp_raw:wdp_label)
 ```
 
-
-#### Blue water scarcity
+### Blue water scarcity
 ```{r}
 wsb_n <- exact_extract(wsb, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
                        append_cols = "HYBAS_ID", progress = TRUE)
@@ -187,7 +176,7 @@ wsb_n <- wsb_n %>%
   dplyr::select(HYBAS_ID, wsb_raw:wsb_label)
 ```
 
-#### Export / Fast load
+### Export / Fast load
 ```{r}
 # write_rds(bws_n, here("output", "bws_n.rds"))
 # write_rds(wdp_n, here("output", "wdp_n.rds"))
@@ -200,9 +189,9 @@ wdp_n <- read_rds(here("output", "wdp_n.rds"))
 wsb_n <- read_rds(here("output", "wsb_n.rds"))
 ```
 
-
 ## Join datasets of Water Availability
 
+### Join
 ```{r}
 sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
 
@@ -212,15 +201,10 @@ son_wa <- h6 %>%
   left_join(wsb_n, by = "HYBAS_ID")
 ```
 
+### Export / Fast load
 ```{r}
 # write_rds(son_wa, here("output", "son_wa.rds"))
 son_wa <- read_rds(here("output", "son_wa.rds"))
-```
-
-```{r}
-son_wa %>%
-  st_drop_geometry %>%
-  skim()
 ```
 
 ### Calculate options of unified value
@@ -229,7 +213,7 @@ son_wa <- son_wa %>%
   rowwise %>%
   mutate(
     wa_min = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
-    wa_avg = mean(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_avg = round(mean(c(bws_n, wdp_n, wsb_n), na.rm = TRUE), 2),
     wa_med = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
     wa_75q = quantile(c(bws_n, wdp_n, wsb_n), probs = 0.75, na.rm = TRUE),
     wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
@@ -237,17 +221,76 @@ son_wa <- son_wa %>%
     .before = geometry
   ) %>%
   ungroup() %>%
-  mutate(n_nas = rowSums(is.na(dplyr::select(., all_of(c("bws_n", "wdp_n", "wsb_n"))))), .before = geometry)
+  mutate(wa_n_nas = rowSums(is.na(dplyr::select(., all_of(c("bws_n", "wdp_n", "wsb_n"))))), .before = geometry)
+```
+
+### Identify which layer is the max/min value
+
+#### Max
+```{r}
+wa_max_layer <- son_wa %>%
+  st_drop_geometry() %>%
+  dplyr::select(HYBAS_ID, bws_n, wdp_n, wsb_n) %>%
+  pivot_longer(c(bws_n, wdp_n, wsb_n), names_to = "layer", values_to = "value") %>% 
+  group_by(HYBAS_ID) %>% 
+  filter(value == max(value, na.rm = TRUE)) %>%
+  mutate(wa_max_lyr = paste0(layer, collapse = "|")) %>%
+  distinct(HYBAS_ID, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::select(HYBAS_ID, wa_max_lyr)
+
+wa_max_layer %>%
+  group_by(wa_max_lyr) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wa),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+#### Min
+```{r}
+wa_min_layer <- son_wa %>%
+  st_drop_geometry() %>%
+  dplyr::select(HYBAS_ID, bws_n, wdp_n, wsb_n) %>%
+  pivot_longer(c(bws_n, wdp_n, wsb_n), names_to = "layer", values_to = "value") %>% 
+  group_by(HYBAS_ID) %>% 
+  filter(value == min(value, na.rm = TRUE)) %>%
+  mutate(wa_min_lyr = paste0(layer, collapse = "|")) %>%
+  distinct(HYBAS_ID, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::select(HYBAS_ID, wa_min_lyr)
+
+wa_min_layer %>%
+  group_by(wa_min_lyr) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wa),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+#### Join 
+```{r}
+son_wa <- son_wa %>%
+  left_join(wa_max_layer, by = "HYBAS_ID") %>%
+  left_join(wa_min_layer, by = "HYBAS_ID") %>%
+  relocate(wa_max_lyr:wa_min_lyr, .before = geometry)
+
+rm(wa_max_layer, wa_min_layer)
 ```
 
 ### Explore the options
+
+#### Skim
 ```{r}
 son_wa %>%
-  dplyr::select(bws_n, wdp_n, wsb_n, wa_min:n_nas) %>%
+  #dplyr::select(bws_n, wdp_n, wsb_n, wa_min:wa_n_nas) %>%
   st_drop_geometry %>%
   skim()
 ```
 
+#### Difference between layers
 ```{r}
 son_wa %>%
   st_drop_geometry %>%
@@ -259,10 +302,11 @@ son_wa %>%
   arrange(desc(n))
 ```
 
+#### Overview of NAs 
 ```{r}
 son_wa %>%
   st_drop_geometry %>%
-  group_by(n_nas) %>%
+  group_by(wa_n_nas) %>%
   summarise(
     n = n(),
     perc = round(n/nrow(son_wa),3)
@@ -270,11 +314,12 @@ son_wa %>%
   arrange(desc(n))
 ```
 
+#### Glimpse
 ```{r}
 glimpse(son_wa)
 ```
 
-### Export
+### Export to shapefile
 ```{r}
 st_write(son_wa, here("output", "sbnt_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
