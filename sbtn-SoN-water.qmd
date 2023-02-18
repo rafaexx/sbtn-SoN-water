@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution"
 author: "Rafael Camargo"
-date: "February 09, 2023"
+date: "February 18, 2023"
 engine: knitr
 format:
   html:
@@ -25,35 +25,35 @@ my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_librar
 
 ### Water Availability
 
-#### Baseline water stress (Hofste et al. 2019)
+#### Baseline water stress [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
 ```{r}
 bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"),
                layer = "annual")
 ```
 
-#### Water depletion (Brauman et al. 2016)
+#### Water depletion [Brauman et al. 2016](http://www.earthstat.org/water-depletion-watergap3-basins/)
 ```{r}
 wdp <- raster(here(my_lib, "WaterDepletion_WaterGap3", "WaterDepletionCat_WG3.tif"))
 ```
 
-#### Blue water scarcity (Mekonnen & Hoekstra 2016)
+#### Blue water scarcity [Mekonnen & Hoekstra 2016](https://www.science.org/doi/10.1126/sciadv.1500323)
 ```{r}
 wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl_monthly_30m", "ws_avg.tif"))
 ```
 
 ### Water Pollution
 
-#### Coastal Eutrophication Potential (Hofste et al. 2019)
+#### Coastal Eutrophication Potential [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
 ```{r}
 cep <- bws
 ```
 
-#### Water Quality Index (Damania et al. 2019)
+#### Water Quality Index [Damania et al. 2019](https://openknowledge.worldbank.org/handle/10986/32245)
 ```{r}
 wqi <- raster(here(my_lib, "WorldBank_ML_Quality", "Risk_index_ML_6_4_19.tif"))
 ```
 
-#### Global Water Quality Database / Global Nutrient Yields Dataset (McDowell et al. 2020)
+#### McDowell ???
 ```{r}
 # wqd <- st_read(here(my_lib, "freshwater_nutrient_enrichment", "freshwater_nutrient_enrichment.gdb", layer = "?"))
 ```
