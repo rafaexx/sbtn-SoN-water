@@ -1,6 +1,6 @@
 # sbtn-SoN-water
 
-This repo (work in progress) contains the code to generate the two ready-to-use unified layers of State of Nature (SoN) for water -- one for water availability and one for water pollution -- in line with the [SBTN Technical Guidance for steps 1 and 2 (Draft for Public Comment)](https://sciencebasedtargetsnetwork.org/wp-content/uploads/2022/09/Technical-Guidance-for-Step-1-Assess-and-Step-2-Prioritize.pdf). These unified layers will enable companies to effectively implement a common approach and would lead to more aligned and comparable results between different companies.
+This repo (work in progress) contains the code to generate the two ready-to-use unified layers of State of Nature (SoN) for water -- one for water availability and one for water pollution -- in line with the [SBTN Technical Guidance for steps 1 and 2 (Draft for Public Comment)](https://sciencebasedtargetsnetwork.org/wp-content/uploads/2022/09/Technical-Guidance-for-Step-1-Assess-and-Step-2-Prioritize.pdf). These unified layers will enable companies to effectively implement a common approach and will lead to more aligned and comparable results between different companies.
 
 This work is a collaboration between WWF, WRI, and SBTN. The approach is described [here](https://docs.google.com/document/d/1DC2GnyD7GUu1HJ0U-29O18xEef99Z__i/edit).
 
