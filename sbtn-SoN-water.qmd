@@ -28,8 +28,7 @@ my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_librar
 #### Baseline water stress (Hofste et al. 2019)
 ```{r}
 bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"),
-               layer = "annual") %>%
-  dplyr::select(bws_raw:bws_label, geometry = Shape)
+               layer = "annual")
 ```
 
 #### Water depletion (Brauman et al. 2016)
@@ -46,9 +45,7 @@ wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl
 
 #### Coastal Eutrophication Potential (Hofste et al. 2019)
 ```{r}
-cep <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"),
-               layer = "annual") %>%
-  dplyr::select(cep_raw:cep_label, geometry = Shape)
+cep <- bws
 ```
 
 #### Water Quality Index (Damania et al. 2019)
@@ -90,13 +87,13 @@ h6 <- read_rds(here("output", "h6.rds"))
 rm(my_lib, wmo_basins)
 ```
 
-## Normalize data to 1-5 values
+## Clean and Normalize data to 1-5 values
 
 ### Baseline water stress
 ```{r}
 bws_n <- bws %>%
   mutate(bws_n = if_else(bws_label == "Arid and Low Water Use", 5, bws_cat), .before = bws_label) %>%
-  dplyr::select(bws_raw, bws_n, bws_label)
+  dplyr::select(bws_raw, bws_n, bws_label, geometry = Shape)
 ```
 
 ### Water depletion
