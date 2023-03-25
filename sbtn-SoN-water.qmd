@@ -11,95 +11,124 @@ execute:
   warning: false    
 ---
 
-## Setup
+## 1. Setup
+
 Load required packages
+
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("here", "dplyr", "magrittr", "sf", "raster", "exactextractr", "skimr", "readr", "tidyr")
+pacman::p_load("here", "dplyr", "magrittr", "sf", "raster", "stars", "exactextractr", "skimr", "readr", "tidyr")
 ```
 
-## Load data
+```{r}
+sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
+```
+
+## 2. Load data
+
 ```{r}
 my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_library" 
 ```
 
-### Water Availability
+### 2.1. Water Availability
 
-#### Baseline water stress [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
+#### 2.1.1. Baseline Water Stress [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
+
 ```{r}
-bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"),
-               layer = "annual")
+bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"), layer = "annual")
 ```
 
-#### Water depletion [Brauman et al. 2016](http://www.earthstat.org/water-depletion-watergap3-basins/)
+#### 2.1.2. Water Depletion [Brauman et al. 2016](http://www.earthstat.org/water-depletion-watergap3-basins/)
+
 ```{r}
 wdp <- raster(here(my_lib, "WaterDepletion_WaterGap3", "WaterDepletionCat_WG3.tif"))
 ```
 
-#### Blue water scarcity [Mekonnen & Hoekstra 2016](https://www.science.org/doi/10.1126/sciadv.1500323)
+#### 2.1.3. Blue Water Scarcity [Mekonnen & Hoekstra 2016](https://www.science.org/doi/10.1126/sciadv.1500323)
+
 ```{r}
 wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl_monthly_30m", "ws_avg.tif"))
 ```
 
-### Water Pollution
+### 2.2. Water Pollution
 
-#### Coastal Eutrophication Potential [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
+#### 2.2.1. Coastal Eutrophication Potential [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
+
 ```{r}
 cep <- bws
 ```
 
-#### Water Quality Index [Damania et al. 2019](https://openknowledge.worldbank.org/handle/10986/32245)
+#### 2.2.2. Prediction of Nitrate-Nitrite [Damania et al. 2019](https://openknowledge.worldbank.org/handle/10986/32245)
+
 ```{r}
-wqi <- raster(here(my_lib, "WorldBank_ML_Quality", "Risk_index_ML_6_4_19.tif"))
+nox_csv <- read_csv(here(my_lib, "WorldBank_ML_Quality", "noxn_preds_05_16_19.csv"))
 ```
 
-#### McDowell ???
+*Spatial grid*
 ```{r}
-# wqd <- st_read(here(my_lib, "freshwater_nutrient_enrichment", "freshwater_nutrient_enrichment.gdb", layer = "?"))
+sp_grid <- read_csv(here(my_lib, "WorldBank_ML_Quality", "ML_data_gridcell_match.csv"))
 ```
 
-### Aggregation unit
+#### 2.2.3. Periphyton Growth Potential [McDowell et al. 2020](https://www.nature.com/articles/s41598-020-60279-w)
 
-#### WMO Basins and Sub-Basins (GRDC 2020), only to add name of basins
+*Total Nitrogen Concentration*
+```{r}
+tnc <- raster(here(my_lib, "water_quality_mcdowell", "data_from_author", "WQ_Variables_Extraction", "TN_Conc.tif"))
+```
+
+*Total Phosphorus Concentration*
+```{r}
+tpc <- raster(here(my_lib, "water_quality_mcdowell", "data_from_author", "WQ_Variables_Extraction", "TP_Conc.tif"))
+```
+
+### 2.3. Aggregation unit
+
+#### 2.3.1. WMO Basins and Sub-Basins [GRDC 2020](https://panda.maps.arcgis.com/home/item.html?id=be4b6f13121b4670ad8f006bc1908e14)
+
+*To add name of basins*
 ```{r}
 wmo_basins <- st_read(here(my_lib, "WMO_basins2020", "wmobb_basins.shp")) %>%
   dplyr::select(WMOBB_id = WMOBB, WMOBB_name = WMOBBName, region = REGNAME)
 ```
 
-#### HydroSHEDS HydroBASINS Level 6 (Lehner & Grill 2013)
-```{r}
-sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
+#### 2.3.2. HydroSHEDS HydroBASINS Level 6 [Lehner & Grill 2013](https://www.hydrosheds.org/products/hydrobasins)
 
+```{r}
 h6 <- st_read(here(my_lib, "hydrosheds", "hybas_lev06_v1c.shp")) %>%
   dplyr::select(HYBAS_ID) %>%
   mutate(HYBAS_ID = as.factor(HYBAS_ID)) %>%
   st_join(wmo_basins, largest = TRUE)
 ```
 
-#### Export / Fast load
+#### 2.3.3. Export / Fast load
+
 ```{r}
 # write_rds(h6, here("output", "h6.rds"))
 h6 <- read_rds(here("output", "h6.rds"))
 ```
 
-## Clean environment
+### 2.4. Clean environment
+
 ```{r}
 rm(my_lib, wmo_basins)
 ```
 
-## Clean and Normalize data to 1-5 values
+## 3. Clean and Classify data to 1-5 values
 
-### Baseline water stress
+### 3.1. Water Availability
+
+#### 3.1.1. Baseline Water Stress
+
 ```{r}
 bws_n <- bws %>%
   mutate(bws_n = if_else(bws_label == "Arid and Low Water Use", 5, bws_cat), .before = bws_label) %>%
   dplyr::select(bws_raw, bws_n, bws_label, geometry = Shape)
 ```
 
-### Water depletion
+#### 3.1.2. Water Depletion
+
 ```{r}
-# reclassification matrix
-wdp_rcl <- matrix(
+wdp_reclass <- matrix(
   c(
     0,NA,
     1,1, # <=5% annual depletion
@@ -111,11 +140,10 @@ wdp_rcl <- matrix(
   ),
   ncol=2, byrow=TRUE
 )
+```
 
-# reclassify
-wdp_n <- reclassify(wdp, wdp_rcl)
-
-rm(wdp_rcl)
+```{r}
+wdp_n <- reclassify(wdp, wdp_reclass)
 ```
 
 ```{r}
@@ -141,7 +169,8 @@ wdp_n <- wdp_n %>%
   dplyr::select(HYBAS_ID, wdp_raw:wdp_label)
 ```
 
-### Blue water scarcity
+#### 3.1.3. Blue Water Scarcity
+
 ```{r}
 wsb_n <- exact_extract(wsb, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
                        append_cols = "HYBAS_ID", progress = TRUE)
@@ -173,45 +202,170 @@ wsb_n <- wsb_n %>%
   dplyr::select(HYBAS_ID, wsb_raw:wsb_label)
 ```
 
-### Export / Fast load
-```{r}
-# write_rds(bws_n, here("output", "bws_n.rds"))
-# write_rds(wdp_n, here("output", "wdp_n.rds"))
-# write_rds(wsb_n, here("output", "wsb_n.rds"))
-```
+#### 3.1.4. Join datasets and Export
 
 ```{r}
-bws_n <- read_rds(here("output", "bws_n.rds"))
-wdp_n <- read_rds(here("output", "wdp_n.rds"))
-wsb_n <- read_rds(here("output", "wsb_n.rds"))
-```
-
-## Join datasets of Water Availability
-
-### Join
-```{r}
-sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
-
-son_wa <- h6 %>%
+wa_n <- h6 %>%
   st_join(bws_n, largest = TRUE) %>%
   left_join(wdp_n, by = "HYBAS_ID") %>%
   left_join(wsb_n, by = "HYBAS_ID")
 ```
 
-### Export / Fast load
 ```{r}
-# write_rds(son_wa, here("output", "son_wa.rds"))
-son_wa <- read_rds(here("output", "son_wa.rds"))
+write_rds(wa_n, here("output", "wa_n.rds"))
 ```
 
-### Calculate options of unified value
+### 3.2. Water Pollution
+
+#### 3.2.1. Coastal Eutrophication Potential
+
 ```{r}
-son_wa <- son_wa %>%
+cep_n <- cep %>%
+  dplyr::select(cep_raw, cep_n = cep_cat, cep_label, geometry = Shape)
+```
+
+#### 3.2.2. Prediction of Nitrate-Nitrite
+
+*Get mean predicted values between 2006 and 2010, then rasterize*
+```{r}
+nox <- nox_csv %>%
+  filter(year >= 2006) %>%
+  group_by(OBJECTID) %>%
+  summarise(value = mean(preds)) %>%
+  right_join(sp_grid, by = "OBJECTID") %>%
+  dplyr::select(-OBJECTID) %>%
+  st_as_sf(coords = c("Lon", "Lat"), crs = 4326) %>%
+  st_rasterize(dx = 0.5, dy = 0.5) %>%
+  as("Raster")
+```
+
+```{r}
+nox_n <- exact_extract(nox, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(nox_n)
+
+filter(nox_n, coefficient_of_variation > 1) %>% nrow()/nrow(nox_n) # < 1% of h6 basins show high variability
+```
+
+```{r}
+nox_n <- nox_n %>%
+  mutate(
+    nox_raw = median,
+    nox_n = case_when(
+      median <= 0.4 ~ 1,
+      between(median, 0.4, 0.8) ~ 2,
+      between(median, 0.8, 1.2) ~ 3,
+      between(median, 1.2, 1.6) ~ 4,
+      median > 1.6 ~ 5
+    ),
+    nox_label = case_when(
+      nox_n == 1 ~ "Very Low Concentration (<=0.4)",
+      nox_n == 2 ~ "Low Concentration (>0.4-0.8)",
+      nox_n == 3 ~ "Moderate Concentration (>0.8-1.2)",
+      nox_n == 4 ~ "High Concentration (>1.2-1.6)",
+      nox_n == 5 ~ "Very High Concentration (>1.6)"
+    )
+  ) %>%
+  dplyr::select(HYBAS_ID, nox_raw:nox_label)
+```
+
+#### 3.2.3. Periphyton Growth Potential
+
+```{r}
+tnc_n <- exact_extract(tnc, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(tnc_n)
+
+filter(tnc_n, coefficient_of_variation > 1) %>% nrow()/nrow(tnc_n) # 4% of h6 basins show high variability
+```
+
+```{r}
+tpc_n <- exact_extract(tpc, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(tpc_n)
+
+filter(tpc_n, coefficient_of_variation > 1) %>% nrow()/nrow(tpc_n) # 2% of h6 basins show high variability
+```
+
+```{r}
+pgp_n <- tnc_n %>%
+  dplyr::select(HYBAS_ID, tnc_raw = median) %>%
+  left_join(
+    dplyr::select(tpc_n, HYBAS_ID, tpc_raw = median),
+    by = "HYBAS_ID" 
+  ) %>%
+  mutate(
+    ratio_n_p = tnc_raw/tpc_raw,
+    limiting = if_else(ratio_n_p < 7, "N-limited", "P-limited"),
+    pgp_n = case_when(
+      limiting == "N-limited" & tnc_raw <= 0.4 ~ 1,
+      limiting == "N-limited" & between(tnc_raw, 0.4, 0.8) ~ 2,
+      limiting == "N-limited" & between(tnc_raw, 0.8, 1.2) ~ 3,
+      limiting == "N-limited" & between(tnc_raw, 1.2, 1.6) ~ 4,
+      limiting == "N-limited" & tnc_raw > 1.6 ~ 5,
+      
+      limiting == "P-limited" & tpc_raw <= 0.023 ~ 1,
+      limiting == "P-limited" & between(tpc_raw, 0.023, 0.046) ~ 2,
+      limiting == "P-limited" & between(tpc_raw, 0.046, 0.100) ~ 3,
+      limiting == "P-limited" & between(tpc_raw, 0.100, 0.150) ~ 4,
+      limiting == "P-limited" & tpc_raw > 0.150 ~ 5
+    ),
+    pgp_label = case_when(
+      limiting == "N-limited" & pgp_n == 1 ~ "N-limited growth acceptable",
+      limiting == "N-limited" & pgp_n == 2 ~ "N-limited growth acceptable",
+      limiting == "N-limited" & pgp_n == 3 ~ "N-limited growth undesirable",
+      limiting == "N-limited" & pgp_n == 4 ~ "N-limited growth undesirable",
+      limiting == "N-limited" & pgp_n == 5 ~ "N-limited growth undesirable",
+      
+      limiting == "P-limited" & pgp_n == 1 ~ "P-limited growth acceptable",
+      limiting == "P-limited" & pgp_n == 2 ~ "P-limited growth acceptable",
+      limiting == "P-limited" & pgp_n == 3 ~ "P-limited growth undesirable",
+      limiting == "P-limited" & pgp_n == 4 ~ "P-limited growth undesirable",
+      limiting == "P-limited" & pgp_n == 5 ~ "P-limited growth undesirable"
+    )
+  ) %>%
+  dplyr::select(HYBAS_ID, tnc_raw, tpc_raw, pgp_n, pgp_label)
+```
+
+#### 3.2.4. Join datasets and Export
+
+```{r}
+wp_n <- h6 %>%
+  st_join(cep_n, largest = TRUE) %>%
+  left_join(nox_n, by = "HYBAS_ID") %>%
+  left_join(pgp_n, by = "HYBAS_ID")
+```
+
+```{r}
+write_rds(wp_n, here("output", "wp_n.rds"))
+```
+
+### 3.3. Clean environment
+
+```{r}
+rm()
+```
+
+## 4. Identify the value for the unified layer
+
+### 4.1. Water Availability
+
+```{r}
+wa_n <- read_rds(here("output", "wa_n.rds"))
+```
+
+#### 4.1.1. Calculate options of unified value
+
+```{r}
+son_wa <- wa_n %>%
   rowwise %>%
   mutate(
     wa_min = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
     wa_avg = round(mean(c(bws_n, wdp_n, wsb_n), na.rm = TRUE), 2),
-    wa_med = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_med = quantile(c(bws_n, wdp_n, wsb_n), probs = 0.5, na.rm = TRUE),
     wa_75q = quantile(c(bws_n, wdp_n, wsb_n), probs = 0.75, na.rm = TRUE),
     wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
     wa_diff = wa_max - wa_min,
@@ -221,9 +375,9 @@ son_wa <- son_wa %>%
   mutate(wa_n_nas = rowSums(is.na(dplyr::select(., all_of(c("bws_n", "wdp_n", "wsb_n"))))), .before = geometry)
 ```
 
-### Identify which layer is the max/min value
+#### 4.1.2. Identify which layer is the max/min value
 
-#### Max
+*Max*
 ```{r}
 wa_max_layer <- son_wa %>%
   st_drop_geometry() %>%
@@ -231,7 +385,7 @@ wa_max_layer <- son_wa %>%
   pivot_longer(c(bws_n, wdp_n, wsb_n), names_to = "layer", values_to = "value") %>% 
   group_by(HYBAS_ID) %>% 
   filter(value == max(value, na.rm = TRUE)) %>%
-  mutate(wa_max_lyr = paste0(layer, collapse = "|")) %>%
+  mutate(wa_max_lyr = paste0(layer, collapse = " | ")) %>%
   distinct(HYBAS_ID, .keep_all = TRUE) %>%
   ungroup() %>%
   dplyr::select(HYBAS_ID, wa_max_lyr)
@@ -245,7 +399,7 @@ wa_max_layer %>%
   arrange(desc(n))
 ```
 
-#### Min
+*Min*
 ```{r}
 wa_min_layer <- son_wa %>%
   st_drop_geometry() %>%
@@ -253,7 +407,7 @@ wa_min_layer <- son_wa %>%
   pivot_longer(c(bws_n, wdp_n, wsb_n), names_to = "layer", values_to = "value") %>% 
   group_by(HYBAS_ID) %>% 
   filter(value == min(value, na.rm = TRUE)) %>%
-  mutate(wa_min_lyr = paste0(layer, collapse = "|")) %>%
+  mutate(wa_min_lyr = paste0(layer, collapse = " | ")) %>%
   distinct(HYBAS_ID, .keep_all = TRUE) %>%
   ungroup() %>%
   dplyr::select(HYBAS_ID, wa_min_lyr)
@@ -267,27 +421,31 @@ wa_min_layer %>%
   arrange(desc(n))
 ```
 
-#### Join 
+*Join*
 ```{r}
 son_wa <- son_wa %>%
   left_join(wa_max_layer, by = "HYBAS_ID") %>%
   left_join(wa_min_layer, by = "HYBAS_ID") %>%
   relocate(wa_max_lyr:wa_min_lyr, .before = geometry)
+```
 
+```{r}
 rm(wa_max_layer, wa_min_layer)
 ```
 
-### Explore the options
+#### 4.1.3. Explore results
 
-#### Skim
+```{r}
+glimpse(son_wa)
+```
+
 ```{r}
 son_wa %>%
-  #dplyr::select(bws_n, wdp_n, wsb_n, wa_min:wa_n_nas) %>%
   st_drop_geometry %>%
   skim()
 ```
 
-#### Difference between layers
+*Difference between layers*
 ```{r}
 son_wa %>%
   st_drop_geometry %>%
@@ -299,7 +457,7 @@ son_wa %>%
   arrange(desc(n))
 ```
 
-#### Overview of NAs 
+*Overview of NAs*
 ```{r}
 son_wa %>%
   st_drop_geometry %>%
@@ -311,12 +469,139 @@ son_wa %>%
   arrange(desc(n))
 ```
 
-#### Glimpse
+### 4.2. Water Pollution
+
 ```{r}
-glimpse(son_wa)
+wp_n <- read_rds(here("output", "wp_n.rds"))
 ```
 
-### Export to shapefile
+#### 4.2.1. Calculate options of unified value
+
 ```{r}
-st_write(son_wa, here("output", "sbnt_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+son_wp <- wp_n %>%
+  rowwise %>%
+  mutate(
+    wp_min = min(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_avg = round(mean(c(cep_n, nox_n, pgp_n), na.rm = TRUE), 2),
+    wp_med = quantile(c(cep_n, nox_n, pgp_n), probs = 0.5, na.rm = TRUE),
+    wp_75q = quantile(c(cep_n, nox_n, pgp_n), probs = 0.75, na.rm = TRUE),
+    wp_max = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_diff = wp_max - wp_min,
+    .before = geometry
+  ) %>%
+  ungroup() %>%
+  mutate(wp_n_nas = rowSums(is.na(dplyr::select(., all_of(c("cep_n", "nox_n", "pgp_n"))))), .before = geometry)
+```
+
+#### 4.2.2. Identify which layer is the max/min value
+
+*Max*
+```{r}
+wp_max_layer <- son_wp %>%
+  st_drop_geometry() %>%
+  dplyr::select(HYBAS_ID, cep_n, nox_n, pgp_n) %>%
+  pivot_longer(c(cep_n, nox_n, pgp_n), names_to = "layer", values_to = "value") %>% 
+  group_by(HYBAS_ID) %>% 
+  filter(value == max(value, na.rm = TRUE)) %>%
+  mutate(wp_max_lyr = paste0(layer, collapse = " | ")) %>%
+  distinct(HYBAS_ID, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::select(HYBAS_ID, wp_max_lyr)
+
+wp_max_layer %>%
+  group_by(wp_max_lyr) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wp),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+*Min*
+```{r}
+wp_min_layer <- son_wp %>%
+  st_drop_geometry() %>%
+  dplyr::select(HYBAS_ID, cep_n, nox_n, pgp_n) %>%
+  pivot_longer(c(cep_n, nox_n, pgp_n), names_to = "layer", values_to = "value") %>% 
+  group_by(HYBAS_ID) %>% 
+  filter(value == min(value, na.rm = TRUE)) %>%
+  mutate(wp_min_lyr = paste0(layer, collapse = " | ")) %>%
+  distinct(HYBAS_ID, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::select(HYBAS_ID, wp_min_lyr)
+
+wp_min_layer %>%
+  group_by(wp_min_lyr) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wp),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+*Join*
+```{r}
+son_wp <- son_wp %>%
+  left_join(wp_max_layer, by = "HYBAS_ID") %>%
+  left_join(wp_min_layer, by = "HYBAS_ID") %>%
+  relocate(wp_max_lyr:wp_min_lyr, .before = geometry)
+```
+
+```{r}
+rm(wp_max_layer, wp_min_layer)
+```
+
+#### 4.2.3. Explore results
+
+```{r}
+glimpse(son_wp)
+```
+
+```{r}
+son_wp %>%
+  st_drop_geometry %>%
+  skim()
+```
+
+*Difference between layers*
+```{r}
+son_wp %>%
+  st_drop_geometry %>%
+  group_by(wp_diff) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wp),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+*Overview of NAs*
+```{r}
+son_wp %>%
+  st_drop_geometry %>%
+  group_by(wp_n_nas) %>%
+  summarise(
+    n = n(),
+    perc = round(n/nrow(son_wp),3)
+  ) %>%
+  arrange(desc(n))
+```
+
+## 5. Join final output and Export
+
+```{r}
+son_water <- son_wa %>%
+  left_join(
+    son_wp %>% dplyr::select(-c(WMOBB_id:region)) %>% st_drop_geometry(),
+    by = "HYBAS_ID"
+  ) %>%
+  relocate(geometry, .after = last_col())
+```
+
+```{r}
+write_rds(son_water, here("output", "sbnt_son_water.rds"))
+```
+
+```{r}
+st_write(son_water, here("output", "sbnt_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
