@@ -58,7 +58,7 @@ wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl
 cep <- bws
 ```
 
-#### 2.2.2. Prediction of Nitrate-Nitrite [Damania et al. 2019](https://openknowledge.worldbank.org/handle/10986/32245)
+#### 2.2.2. Nitrate-Nitrite Concentration [Damania et al. 2019](https://openknowledge.worldbank.org/handle/10986/32245)
 
 ```{r}
 nox_csv <- read_csv(here(my_lib, "WorldBank_ML_Quality", "noxn_preds_05_16_19.csv"))
@@ -224,7 +224,7 @@ cep_n <- cep %>%
   dplyr::select(cep_raw, cep_n = cep_cat, cep_label, geometry = Shape)
 ```
 
-#### 3.2.2. Prediction of Nitrate-Nitrite
+#### 3.2.2. Nitrate-Nitrite Concentration
 
 *Get mean predicted values between 2006 and 2010, then rasterize*
 ```{r}
