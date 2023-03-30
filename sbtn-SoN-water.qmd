@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution"
 author: "Rafael Camargo"
-date: "March 27, 2023"
+date: "March 30, 2023"
 engine: knitr
 format:
   html:
@@ -345,240 +345,36 @@ write_rds(wp_n, here("output", "wp_n.rds"))
 
 ## 4. Identify the value for the unified layer
 
-### 4.1. Water Availability
+### 4.1. Max of Water Availability
 
 ```{r}
 wa_n <- read_rds(here("output", "wa_n.rds"))
 ```
 
-#### 4.1.1. Calculate options of unified value
-
 ```{r}
 son_wa <- wa_n %>%
   rowwise %>%
   mutate(
-    wa_min = min(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
-    wa_avg = round(mean(c(bws_n, wdp_n, wsb_n), na.rm = TRUE), 2),
-    wa_med = quantile(c(bws_n, wdp_n, wsb_n), probs = 0.5, na.rm = TRUE),
-    wa_75q = quantile(c(bws_n, wdp_n, wsb_n), probs = 0.75, na.rm = TRUE),
     wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
-    wa_diff = wa_max - wa_min,
-    .before = geometry
+    .after = region
   ) %>%
-  ungroup() %>%
-  mutate(wa_n_nas = rowSums(is.na(dplyr::select(., all_of(c("bws_n", "wdp_n", "wsb_n"))))), .before = geometry)
+  ungroup()
 ```
 
-#### 4.1.2. Identify which layer is the max/min value
-
-*Max*
-```{r}
-wa_max_layer <- son_wa %>%
-  st_drop_geometry() %>%
-  dplyr::select(HYBAS_ID, bws_n, wdp_n, wsb_n) %>%
-  pivot_longer(c(bws_n, wdp_n, wsb_n), names_to = "layer", values_to = "value") %>% 
-  group_by(HYBAS_ID) %>% 
-  filter(value == max(value, na.rm = TRUE)) %>%
-  mutate(wa_max_lyr = paste0(layer, collapse = " | ")) %>%
-  distinct(HYBAS_ID, .keep_all = TRUE) %>%
-  ungroup() %>%
-  dplyr::select(HYBAS_ID, wa_max_lyr)
-
-wa_max_layer %>%
-  group_by(wa_max_lyr) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wa),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-*Min*
-```{r}
-wa_min_layer <- son_wa %>%
-  st_drop_geometry() %>%
-  dplyr::select(HYBAS_ID, bws_n, wdp_n, wsb_n) %>%
-  pivot_longer(c(bws_n, wdp_n, wsb_n), names_to = "layer", values_to = "value") %>% 
-  group_by(HYBAS_ID) %>% 
-  filter(value == min(value, na.rm = TRUE)) %>%
-  mutate(wa_min_lyr = paste0(layer, collapse = " | ")) %>%
-  distinct(HYBAS_ID, .keep_all = TRUE) %>%
-  ungroup() %>%
-  dplyr::select(HYBAS_ID, wa_min_lyr)
-
-wa_min_layer %>%
-  group_by(wa_min_lyr) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wa),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-*Join*
-```{r}
-son_wa <- son_wa %>%
-  left_join(wa_max_layer, by = "HYBAS_ID") %>%
-  left_join(wa_min_layer, by = "HYBAS_ID") %>%
-  relocate(wa_max_lyr:wa_min_lyr, .before = geometry)
-```
-
-```{r}
-rm(wa_max_layer, wa_min_layer)
-```
-
-#### 4.1.3. Explore results
-
-```{r}
-glimpse(son_wa)
-```
-
-```{r}
-son_wa %>%
-  st_drop_geometry %>%
-  skim()
-```
-
-*Difference between layers*
-```{r}
-son_wa %>%
-  st_drop_geometry %>%
-  group_by(wa_diff) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wa),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-*Overview of NAs*
-```{r}
-son_wa %>%
-  st_drop_geometry %>%
-  group_by(wa_n_nas) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wa),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-### 4.2. Water Pollution
+### 4.2. Max of Water Pollution
 
 ```{r}
 wp_n <- read_rds(here("output", "wp_n.rds"))
 ```
 
-#### 4.2.1. Calculate options of unified value
-
 ```{r}
 son_wp <- wp_n %>%
   rowwise %>%
   mutate(
-    wp_min = min(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
-    wp_avg = round(mean(c(cep_n, nox_n, pgp_n), na.rm = TRUE), 2),
-    wp_med = quantile(c(cep_n, nox_n, pgp_n), probs = 0.5, na.rm = TRUE),
-    wp_75q = quantile(c(cep_n, nox_n, pgp_n), probs = 0.75, na.rm = TRUE),
     wp_max = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
-    wp_diff = wp_max - wp_min,
-    .before = geometry
+    .after = region
   ) %>%
-  ungroup() %>%
-  mutate(wp_n_nas = rowSums(is.na(dplyr::select(., all_of(c("cep_n", "nox_n", "pgp_n"))))), .before = geometry)
-```
-
-#### 4.2.2. Identify which layer is the max/min value
-
-*Max*
-```{r}
-wp_max_layer <- son_wp %>%
-  st_drop_geometry() %>%
-  dplyr::select(HYBAS_ID, cep_n, nox_n, pgp_n) %>%
-  pivot_longer(c(cep_n, nox_n, pgp_n), names_to = "layer", values_to = "value") %>% 
-  group_by(HYBAS_ID) %>% 
-  filter(value == max(value, na.rm = TRUE)) %>%
-  mutate(wp_max_lyr = paste0(layer, collapse = " | ")) %>%
-  distinct(HYBAS_ID, .keep_all = TRUE) %>%
-  ungroup() %>%
-  dplyr::select(HYBAS_ID, wp_max_lyr)
-
-wp_max_layer %>%
-  group_by(wp_max_lyr) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wp),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-*Min*
-```{r}
-wp_min_layer <- son_wp %>%
-  st_drop_geometry() %>%
-  dplyr::select(HYBAS_ID, cep_n, nox_n, pgp_n) %>%
-  pivot_longer(c(cep_n, nox_n, pgp_n), names_to = "layer", values_to = "value") %>% 
-  group_by(HYBAS_ID) %>% 
-  filter(value == min(value, na.rm = TRUE)) %>%
-  mutate(wp_min_lyr = paste0(layer, collapse = " | ")) %>%
-  distinct(HYBAS_ID, .keep_all = TRUE) %>%
-  ungroup() %>%
-  dplyr::select(HYBAS_ID, wp_min_lyr)
-
-wp_min_layer %>%
-  group_by(wp_min_lyr) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wp),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-*Join*
-```{r}
-son_wp <- son_wp %>%
-  left_join(wp_max_layer, by = "HYBAS_ID") %>%
-  left_join(wp_min_layer, by = "HYBAS_ID") %>%
-  relocate(wp_max_lyr:wp_min_lyr, .before = geometry)
-```
-
-```{r}
-rm(wp_max_layer, wp_min_layer)
-```
-
-#### 4.2.3. Explore results
-
-```{r}
-glimpse(son_wp)
-```
-
-```{r}
-son_wp %>%
-  st_drop_geometry %>%
-  skim()
-```
-
-*Difference between layers*
-```{r}
-son_wp %>%
-  st_drop_geometry %>%
-  group_by(wp_diff) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wp),3)
-  ) %>%
-  arrange(desc(n))
-```
-
-*Overview of NAs*
-```{r}
-son_wp %>%
-  st_drop_geometry %>%
-  group_by(wp_n_nas) %>%
-  summarise(
-    n = n(),
-    perc = round(n/nrow(son_wp),3)
-  ) %>%
-  arrange(desc(n))
+  ungroup()
 ```
 
 ## 5. Join final output and Export
