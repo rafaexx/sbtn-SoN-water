@@ -343,12 +343,6 @@ wp_n <- h6 %>%
 write_rds(wp_n, here("output", "wp_n.rds"))
 ```
 
-### 3.3. Clean environment
-
-```{r}
-rm()
-```
-
 ## 4. Identify the value for the unified layer
 
 ### 4.1. Water Availability
