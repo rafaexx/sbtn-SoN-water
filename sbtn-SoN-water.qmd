@@ -44,7 +44,7 @@ bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap
 wdp <- raster(here(my_lib, "WaterDepletion_WaterGap3", "WaterDepletionCat_WG3.tif"))
 ```
 
-#### 2.1.3. Blue Water Scarcity [Mekonnen & Hoekstra 2016](https://www.science.org/doi/10.1126/sciadv.1500323)
+#### 2.1.3. Blue Water Scarcity [Mekonnen & Hoekstra 2016](https://doi.org/10.1126/sciadv.1500323)
 
 ```{r}
 wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl_monthly_30m", "ws_avg.tif"))
@@ -58,7 +58,7 @@ wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl
 cep <- bws
 ```
 
-#### 2.2.2. Nitrate-Nitrite Concentration [Damania et al. 2019](https://openknowledge.worldbank.org/handle/10986/32245)
+#### 2.2.2. Nitrate-Nitrite Concentration [Damania et al. 2019](https://wbwaterdata.org/dataset/global-nitrate-nitrite-surface-water)
 
 ```{r}
 nox_csv <- read_csv(here(my_lib, "WorldBank_ML_Quality", "noxn_preds_05_16_19.csv"))
@@ -69,7 +69,7 @@ nox_csv <- read_csv(here(my_lib, "WorldBank_ML_Quality", "noxn_preds_05_16_19.cs
 sp_grid <- read_csv(here(my_lib, "WorldBank_ML_Quality", "ML_data_gridcell_match.csv"))
 ```
 
-#### 2.2.3. Periphyton Growth Potential [McDowell et al. 2020](https://www.nature.com/articles/s41598-020-60279-w)
+#### 2.2.3. Periphyton Growth Potential [McDowell et al. 2020](https://figshare.com/s/e44fe7319585183d888f)
 
 *Total Nitrogen Concentration*
 ```{r}
