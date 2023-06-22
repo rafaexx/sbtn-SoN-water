@@ -1,0 +1,151 @@
+---
+title: "SBTN State of Nature Water unified layers"
+subtitle: "water availability and water pollution - National and Sub-national level"
+author: "Rafael Camargo"
+date: "June 21, 2023"
+engine: knitr
+format:
+  html:
+    toc: true
+execute:
+  warning: false    
+---
+
+## 1. Setup
+
+Load required packages
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(here, tidyverse, sf, rnaturalearth, fasterize, raster, terra, exactextractr, mapview)
+```
+
+## 2. Load data
+
+```{r}
+son_water <- read_rds(here("output", "sbnt_son_water.rds"))
+```
+
+```{r}
+adm0 <- ne_countries(scale = "medium", returnclass = "sf")
+```
+
+```{r}
+adm1 <- ne_states(returnclass = "sf")
+```
+
+## 3. Rasterize indicators
+
+```{r}
+# fasterize(son_water, raster(son_water, res = 0.004), field = "bws_n", fun = "max") |> 
+#   writeRaster(here("output", "bws_004.tif"))
+```
+
+```{r}
+# fasterize(son_water, raster(son_water, res = 0.004), field = "cep_n", fun = "max") |> 
+#   writeRaster(here("output", "cep_004.tif"))
+```
+
+```{r}
+stack <- c(
+  rast(here("output", "bws_004.tif")),
+  rast(here("output", "cep_004.tif"))
+)
+
+names(stack) <- c("bws", "cep")
+```
+
+## 4. Spatial aggregation to adm levels
+
+```{r}
+stack_adm0 <- stack |> 
+  exact_extract(adm0, fun = "mean", append_cols = "adm0_a3", progress = TRUE) 
+```
+
+```{r}
+stack_adm1 <- stack |> 
+  exact_extract(adm1, fun = "mean", append_cols = "adm1_code", progress = TRUE) 
+```
+
+## 5. Join aggregated values to spatial objects
+
+```{r}
+son_water_adm0 <- adm0 |> 
+  left_join(stack_adm0, by = "adm0_a3") |> 
+  dplyr::select(
+    adm0_code = adm0_a3,
+    adm0 = admin,
+    bws = mean.bws,
+    cep = mean.cep
+  ) |> 
+  mutate(across(bws:cep, ~ round(.x, 2)))
+```
+
+```{r}
+son_water_adm1 <- adm1 |> 
+  left_join(stack_adm1, by = "adm1_code") |> 
+  dplyr::select(
+    adm1_code,
+    adm0 = admin,
+    adm1 = name,
+    bws = mean.bws,
+    cep = mean.cep
+  ) |> 
+  mutate(across(bws:cep, ~ round(.x, 2)))
+```
+
+## 6. View outputs
+
+*National level*
+```{r}
+mapview(
+  son_water_adm0, 
+  zcol = "bws",
+  col.regions = colorRampPalette(c("#e9ffbe", "#ffd700", "#e60000")), 
+  at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
+  lwd = 0.1
+) +
+mapview(
+  son_water_adm0, 
+  zcol = "cep",
+  col.regions = colorRampPalette(c("#e9ffbe", "#ffd700", "#e60000")), 
+  at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
+  lwd = 0.1
+)  
+```
+
+*Sub-national level*
+```{r}
+mapview(
+  son_water_adm1, 
+  zcol = "bws",
+  col.regions = colorRampPalette(c("#e9ffbe", "#ffd700", "#e60000")), 
+  at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
+  lwd = 0.1
+) +
+mapview(
+  son_water_adm1, 
+  zcol = "cep",
+  col.regions = colorRampPalette(c("#e9ffbe", "#ffd700", "#e60000")), 
+  at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
+  lwd = 0.1
+)  
+```
+
+## 7. Export
+
+```{r}
+write_rds(son_water_adm0, here("output", "sbnt_son_water_adm0.rds"))
+```
+
+```{r}
+st_write(son_water_adm0, here("output", "sbnt_son_water_adm0.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
+
+```{r}
+write_rds(son_water_adm1, here("output", "sbnt_son_water_adm1.rds"))
+```
+
+```{r}
+st_write(son_water_adm1, here("output", "sbnt_son_water_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
