@@ -389,9 +389,9 @@ son_water <- son_wa %>%
 ```
 
 ```{r}
-write_rds(son_water, here("output", "sbnt_son_water.rds"))
+write_rds(son_water, here("output", "sbtn_son_water.rds"))
 ```
 
 ```{r}
-st_write(son_water, here("output", "sbnt_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(son_water, here("output", "sbtn_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```

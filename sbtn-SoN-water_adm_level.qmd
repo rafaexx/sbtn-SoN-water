@@ -23,7 +23,7 @@ pacman::p_load(here, tidyverse, sf, rnaturalearth, stars, terra, fasterize, rast
 ## 2. Load data
 
 ```{r}
-son_water <- read_rds(here("output", "sbnt_son_water.rds"))
+son_water <- read_rds(here("output", "sbtn_son_water.rds"))
 ```
 
 *National level administrative division*
