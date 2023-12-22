@@ -17,7 +17,7 @@ Load required packages
 
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("here", "dplyr", "magrittr", "sf", "raster", "stars", "exactextractr", "skimr", "readr", "tidyr")
+pacman::p_load(here, dplyr, magrittr, sf, raster, stars, exactextractr, skimr, readr, tidyr)
 ```
 
 ```{r}
