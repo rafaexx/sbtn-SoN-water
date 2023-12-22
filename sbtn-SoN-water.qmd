@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution"
 author: "Rafael Camargo"
-date: "March 30, 2023"
+date: "Dec 22, 2023"
 engine: knitr
 format:
   html:
@@ -17,7 +17,7 @@ Load required packages
 
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(here, dplyr, magrittr, sf, raster, stars, exactextractr, skimr, readr, tidyr)
+pacman::p_load(here, dplyr, magrittr, sf, terra, stars, exactextractr, skimr, readr, tidyr, openxlsx)
 ```
 
 ```{r}
@@ -26,33 +26,29 @@ sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
 
 ## 2. Load data
 
-```{r}
-my_lib <- "C:/Users/Rafael.Camargo/wwfgermany/FB-OuR-Daten - WRF/ws_gis/1_library" 
-```
-
 ### 2.1. Water Availability
 
-#### 2.1.1. Baseline Water Stress [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
+#### 2.1.1. Baseline Water Stress [Kuzma et al. 2023](https://www.wri.org/data/aqueduct-global-maps-40-data)
 
 ```{r}
-bws <- st_read(here(my_lib, "aqueduct30_V01_2019", "baseline", "annual", "arcmap", "y2019m07d12_aqueduct30_v01.gdb"), layer = "annual")
+bws <- st_read(here("inputs", "aqueduct40", "GDB", "Aq40_Y2023D07M05.gdb"), layer = "baseline_annual")
 ```
 
 #### 2.1.2. Water Depletion [Brauman et al. 2016](http://www.earthstat.org/water-depletion-watergap3-basins/)
 
 ```{r}
-wdp <- raster(here(my_lib, "WaterDepletion_WaterGap3", "WaterDepletionCat_WG3.tif"))
+wdp <- rast(here("inputs", "water_depletion", "WaterDepletionCat_WG3.tif"))
 ```
 
-#### 2.1.3. Blue Water Scarcity [Mekonnen & Hoekstra 2016](https://doi.org/10.1126/sciadv.1500323)
+#### 2.1.3. Blue Water Scarcity [Hoekstra & Mekonnen 2011](https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip)
 
 ```{r}
-wsb <- raster(here(my_lib, "BlueWaterScarcity", "WS_blue_monthly_rasters", "WSbl_monthly_30m", "ws_avg.tif"))
+wsb <- st_read(here("inputs", "blue_water_scarcity", "Report53-BlueWaterScarcity-ArcGIS-ShapeFile", "Monthly_WS_GRDC_405_basins.shp"))
 ```
 
 ### 2.2. Water Pollution
 
-#### 2.2.1. Coastal Eutrophication Potential [Hofste et al. 2019](https://www.wri.org/data/aqueduct-global-maps-30-data)
+#### 2.2.1. Coastal Eutrophication Potential [Kuzma et al. 2023](https://www.wri.org/data/aqueduct-global-maps-40-data)
 
 ```{r}
 cep <- bws
@@ -61,24 +57,24 @@ cep <- bws
 #### 2.2.2. Nitrate-Nitrite Concentration [Damania et al. 2019](https://wbwaterdata.org/dataset/global-nitrate-nitrite-surface-water)
 
 ```{r}
-nox_csv <- read_csv(here(my_lib, "WorldBank_ML_Quality", "noxn_preds_05_16_19.csv"))
+nox_csv <- read_csv(here("inputs", "nitrate_nitrite", "noxn_preds_05_16_19.csv"))
 ```
 
 *Spatial grid*
 ```{r}
-sp_grid <- read_csv(here(my_lib, "WorldBank_ML_Quality", "ML_data_gridcell_match.csv"))
+sp_grid <- read_csv(here("inputs", "nitrate_nitrite", "ML_data_gridcell_match.csv"))
 ```
 
 #### 2.2.3. Periphyton Growth Potential [McDowell et al. 2020](https://figshare.com/s/e44fe7319585183d888f)
 
 *Total Nitrogen Concentration*
 ```{r}
-tnc <- raster(here(my_lib, "water_quality_mcdowell", "data_from_author", "WQ_Variables_Extraction", "TN_Conc.tif"))
+tnc <- rast(here("inputs", "periphyton_growth_potential", "TN_Conc.tif"))
 ```
 
 *Total Phosphorus Concentration*
 ```{r}
-tpc <- raster(here(my_lib, "water_quality_mcdowell", "data_from_author", "WQ_Variables_Extraction", "TP_Conc.tif"))
+tpc <- rast(here("inputs", "periphyton_growth_potential", "TP_Conc.tif"))
 ```
 
 ### 2.3. Aggregation unit
@@ -87,30 +83,24 @@ tpc <- raster(here(my_lib, "water_quality_mcdowell", "data_from_author", "WQ_Var
 
 *To add name of basins*
 ```{r}
-wmo_basins <- st_read(here(my_lib, "WMO_basins2020", "wmobb_basins.shp")) |> 
-  dplyr::select(WMOBB_id = WMOBB, WMOBB_name = WMOBBName, region = REGNAME)
+# wmo_basins <- st_read(here("inputs", "wmo_basins", "wmobb_basins.shp")) |> 
+#   select(WMOBB_id = WMOBB, WMOBB_name = WMOBBName, region = REGNAME)
 ```
 
 #### 2.3.2. HydroSHEDS HydroBASINS Level 6 [Lehner & Grill 2013](https://www.hydrosheds.org/products/hydrobasins)
 
 ```{r}
-h6 <- st_read(here(my_lib, "hydrosheds", "hybas_lev06_v1c.shp")) |>
-  dplyr::select(HYBAS_ID) |>
-  mutate(HYBAS_ID = as.factor(HYBAS_ID)) |>
-  st_join(wmo_basins, largest = TRUE)
+# h6 <- st_read(here("inputs", "hydrosheds", "hybas_lev06_v1c.shp")) |>
+#   select(HYBAS_ID) |>
+#   mutate(HYBAS_ID = as.factor(HYBAS_ID)) |>
+#   st_join(wmo_basins, largest = TRUE)
 ```
 
 #### 2.3.3. Export / Fast load
 
 ```{r}
-# write_rds(h6, here("output", "h6.rds"))
-h6 <- read_rds(here("output", "h6.rds"))
-```
-
-### 2.4. Clean environment
-
-```{r}
-rm(my_lib, wmo_basins)
+# write_rds(h6, here("outputs", "h6.rds"))
+h6 <- read_rds(here("outputs", "h6.rds"))
 ```
 
 ## 3. Clean and Classify data to 1-5 values
@@ -121,8 +111,18 @@ rm(my_lib, wmo_basins)
 
 ```{r}
 bws_n <- bws |>
-  mutate(bws_n = if_else(bws_label == "Arid and Low Water Use", 5, bws_cat), .before = bws_label) |>
-  dplyr::select(bws_raw, bws_n, bws_label, geometry = Shape)
+  mutate(
+    bws_raw = na_if(bws_raw, -9999),
+    bws_raw = na_if(bws_raw, 9999),
+    bws_n = case_when(
+      bws_label == "Low (<10%)" ~ 1,
+      bws_label == "Low - Medium (10-20%)" ~ 2,
+      bws_label == "Medium - High (20-40%)" ~ 3,
+      bws_label == "High (40-80%)" ~ 4,
+      bws_label %in% c("Extremely High (>80%)", "Arid and Low Water Use") ~ 5
+    )
+  ) |>
+  select(bws_raw, bws_n, bws_label, geometry = Shape)
 ```
 
 #### 3.1.2. Water Depletion
@@ -143,11 +143,9 @@ wdp_reclass <- matrix(
 ```
 
 ```{r}
-wdp_n <- reclassify(wdp, wdp_reclass)
-```
-
-```{r}
-wdp_n <- exact_extract(wdp_n, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+wdp_n <- wdp |>
+  classify(wdp_reclass) |> 
+  exact_extract(h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
                        append_cols = "HYBAS_ID", progress = TRUE) 
 
 skim(wdp_n)
@@ -166,18 +164,18 @@ wdp_n <- wdp_n |>
       wdp_n == 5 ~ ">75% annual depletion"
     )
   ) |>
-  dplyr::select(HYBAS_ID, wdp_raw:wdp_label)
+  select(HYBAS_ID, wdp_raw:wdp_label)
 ```
 
 #### 3.1.3. Blue Water Scarcity
 
 ```{r}
-wsb_n <- exact_extract(wsb, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+wsb_n <- wsb |> 
+  rasterize(rast(wsb, res = 0.08333), field = "Wsavg", fun = "mean") |> # ~10km
+  exact_extract(h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
                        append_cols = "HYBAS_ID", progress = TRUE)
 
 skim(wsb_n)
-
-filter(wsb_n, coefficient_of_variation > 1) |> nrow()/nrow(wsb_n) # 28% of h6 basins show high variability
 ```
 
 ```{r}
@@ -199,7 +197,7 @@ wsb_n <- wsb_n |>
       wsb_n == 5 ~ "Severe Blue Water Scarcity (>5.0)"
     )
   ) |>
-  dplyr::select(HYBAS_ID, wsb_raw:wsb_label)
+  select(HYBAS_ID, wsb_raw:wsb_label)
 ```
 
 #### 3.1.4. Join datasets and Export
@@ -212,7 +210,7 @@ wa_n <- h6 |>
 ```
 
 ```{r}
-write_rds(wa_n, here("output", "wa_n.rds"))
+write_rds(wa_n, here("outputs", "wa_n.rds"))
 ```
 
 ### 3.2. Water Pollution
@@ -221,7 +219,18 @@ write_rds(wa_n, here("output", "wa_n.rds"))
 
 ```{r}
 cep_n <- cep |>
-  dplyr::select(cep_raw, cep_n = cep_cat, cep_label, geometry = Shape)
+  mutate(
+    cep_raw = na_if(cep_raw, -9999),
+    cep_raw = na_if(cep_raw, 9999),
+    cep_n = case_when(
+      cep_label == "Low (<-5)" ~ 1,
+      cep_label == "Low - Medium (-5 to 0)" ~ 2,
+      cep_label == "Medium - High (0 to 1)" ~ 3,
+      cep_label == "High (1 to 5)" ~ 4,
+      cep_label == "Extremely High (>5)" ~ 5
+    )
+  ) |>
+  select(cep_raw, cep_n, cep_label, geometry = Shape)
 ```
 
 #### 3.2.2. Nitrate-Nitrite Concentration
@@ -233,10 +242,10 @@ nox <- nox_csv |>
   group_by(OBJECTID) |>
   summarise(value = mean(preds)) |>
   right_join(sp_grid, by = "OBJECTID") |>
-  dplyr::select(-OBJECTID) |>
+  select(-OBJECTID) |>
   st_as_sf(coords = c("Lon", "Lat"), crs = 4326) |>
   st_rasterize(dx = 0.5, dy = 0.5) |>
-  as("Raster")
+  rast()
 ```
 
 ```{r}
@@ -244,8 +253,6 @@ nox_n <- exact_extract(nox, h6, fun = c("mean", "median", "quantile", "majority"
                        append_cols = "HYBAS_ID", progress = TRUE)
 
 skim(nox_n)
-
-filter(nox_n, coefficient_of_variation > 1) |> nrow()/nrow(nox_n) # < 1% of h6 basins show high variability
 ```
 
 ```{r}
@@ -267,7 +274,7 @@ nox_n <- nox_n |>
       nox_n == 5 ~ "Very High Concentration (>1.6)"
     )
   ) |>
-  dplyr::select(HYBAS_ID, nox_raw:nox_label)
+  select(HYBAS_ID, nox_raw:nox_label)
 ```
 
 #### 3.2.3. Periphyton Growth Potential
@@ -277,8 +284,6 @@ tnc_n <- exact_extract(tnc, h6, fun = c("mean", "median", "quantile", "majority"
                        append_cols = "HYBAS_ID", progress = TRUE)
 
 skim(tnc_n)
-
-filter(tnc_n, coefficient_of_variation > 1) |> nrow()/nrow(tnc_n) # 4% of h6 basins show high variability
 ```
 
 ```{r}
@@ -286,15 +291,13 @@ tpc_n <- exact_extract(tpc, h6, fun = c("mean", "median", "quantile", "majority"
                        append_cols = "HYBAS_ID", progress = TRUE)
 
 skim(tpc_n)
-
-filter(tpc_n, coefficient_of_variation > 1) |> nrow()/nrow(tpc_n) # 2% of h6 basins show high variability
 ```
 
 ```{r}
 pgp_n <- tnc_n |>
-  dplyr::select(HYBAS_ID, tnc_raw = median) |>
+  select(HYBAS_ID, tnc_raw = median) |>
   left_join(
-    dplyr::select(tpc_n, HYBAS_ID, tpc_raw = median),
+    select(tpc_n, HYBAS_ID, tpc_raw = median),
     by = "HYBAS_ID" 
   ) |>
   mutate(
@@ -327,7 +330,7 @@ pgp_n <- tnc_n |>
       limiting == "P-limited" & pgp_n == 5 ~ "P-limited growth undesirable"
     )
   ) |>
-  dplyr::select(HYBAS_ID, tnc_raw, tpc_raw, pgp_n, pgp_label)
+  select(HYBAS_ID, tnc_raw, tpc_raw, ratio_n_p, limiting, pgp_n, pgp_label)
 ```
 
 #### 3.2.4. Join datasets and Export
@@ -340,7 +343,7 @@ wp_n <- h6 |>
 ```
 
 ```{r}
-write_rds(wp_n, here("output", "wp_n.rds"))
+write_rds(wp_n, here("outputs", "wp_n.rds"))
 ```
 
 ## 4. Identify the value for the unified layer
@@ -348,14 +351,15 @@ write_rds(wp_n, here("output", "wp_n.rds"))
 ### 4.1. Max of Water Availability
 
 ```{r}
-wa_n <- read_rds(here("output", "wa_n.rds"))
+wa_n <- read_rds(here("outputs", "wa_n.rds"))
 ```
 
 ```{r}
 son_wa <- wa_n |>
-  rowwise |>
+  rowwise() |>
   mutate(
     wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_max = if_else(between(wa_max, 1, 5), wa_max, NA),
     .after = region
   ) |>
   ungroup()
@@ -364,34 +368,60 @@ son_wa <- wa_n |>
 ### 4.2. Max of Water Pollution
 
 ```{r}
-wp_n <- read_rds(here("output", "wp_n.rds"))
+wp_n <- read_rds(here("outputs", "wp_n.rds"))
 ```
 
 ```{r}
 son_wp <- wp_n |>
-  rowwise |>
+  rowwise() |>
   mutate(
     wp_max = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_max = if_else(between(wp_max, 1, 5), wp_max, NA),
     .after = region
   ) |>
   ungroup()
 ```
 
-## 5. Join final output and Export
+## 5. Join final output
 
 ```{r}
 son_water <- son_wa |>
   left_join(
-    son_wp |> dplyr::select(-c(WMOBB_id:region)) |> st_drop_geometry(),
+    son_wp |> select(-c(WMOBB_id:region)) |> st_drop_geometry(),
     by = "HYBAS_ID"
   ) |>
   relocate(geometry, .after = last_col())
+
+st_drop_geometry(son_water) |> skim()
 ```
 
 ```{r}
-write_rds(son_water, here("output", "sbtn_son_water.rds"))
+son_water |> 
+  st_transform("EPSG:8857") |> 
+  st_simplify(dTolerance = 10000) |> 
+  st_transform(st_crs(son_water)) |> 
+  mutate(across(c(wa_max, wp_max), ~ as.factor(.x))) |> 
+  mapview::mapview(
+    layer.name = list("Max Water Availability", "Max Water Pollution"),
+    zcol = c("wa_max", "wp_max"),
+    col.regions = c("#e9ffbe", "#ffff73", "#ffd700", "#ff5500", "#cc0000"),
+    lwd = 0.2,
+    alpha.regions = 0.9
+  )
+```
+
+## 6. Export
+
+```{r}
+write_rds(son_water, here("outputs", "sbtn_son_water_v2.rds"))
 ```
 
 ```{r}
-st_write(son_water, here("output", "sbtn_son_water.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+st_write(son_water, here("outputs", "sbtn_son_water_v2.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
+
+```{r}
+write.xlsx(list(
+  "SBTN SoN Water" = st_drop_geometry(son_water)
+), file = here("outputs", "sbtn_son_water_v2.xlsx"), rowNames = FALSE)
 ```
