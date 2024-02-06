@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution - National and Sub-national level, weighted by water consumption / value of crop production"
 author: "Rafael Camargo"
-date: "July 17, 2023"
+date: "Feb 6, 2024"
 engine: knitr
 format:
   html:
@@ -17,32 +17,27 @@ Load required packages
 
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(here, tidyverse, sf, rnaturalearth, stars, terra, fasterize, raster, purrr, exactextractr, skimr, mapview, openxlsx)
+pacman::p_load(here, dplyr, readr, sf, stars, terra, fasterize, purrr, exactextractr, skimr, mapview, openxlsx)
 ```
 
 ## 2. Load data
 
 ```{r}
-son_water <- read_rds(here("output", "sbtn_son_water.rds"))
+son_water <- read_rds(here("outputs", "sbtn_son_water_v2.rds"))
+```
+
+```{r}
+onedrive_data <- "/Users/camargorafael/Library/CloudStorage/OneDrive-SharedLibraries-TheBostonConsultingGroup,Inc/Q-NC-Communities - G3S/3. Data"
 ```
 
 *National level administrative division*
 ```{r}
-adm0 <- ne_countries(scale = "medium", returnclass = "sf") |> 
-  dplyr::select(
-    adm0_code = adm0_a3,
-    adm0 = admin
-  )
+adm0 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm0_100m.shp"))
 ```
 
 *Sub-national level administrative division*
 ```{r}
-adm1 <- ne_states(returnclass = "sf") |> 
-  dplyr::select(
-    adm1_code,
-    adm0 = admin,
-    adm1 = name
-  )
+adm1 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm1_100m.shp"))
 ```
 
 *Water consumption as weights for water availability* https://doi.org/10.7910/DVN/VIQEAB
@@ -57,7 +52,7 @@ weights_wa <- bind_rows(
   group_by(Grid_ID, lon, lat) |> 
   summarise(value = median(`2020`, na.rm = TRUE)) |> # multi-model ensemble
   ungroup() |> 
-  dplyr::select(-Grid_ID) |> 
+  select(-Grid_ID) |> 
   st_as_sf(coords = c("lon", "lat"), crs = 4326) |> 
   st_rasterize(dx = 0.5, dy = 0.5) |> 
   as("SpatRaster")
@@ -70,11 +65,11 @@ weights_wp <- rast(here("inputs", "value_crop_production", "spam2010V2r0_global_
 
 ## 3. Rasterize SoN water layers
 
--   if memory exhausted, see https://stackoverflow.com/questions/51295402/r-on-macos-error-vector-memory-exhausted-limit-reached \*
+if memory exhausted, see https://stackoverflow.com/questions/51295402/r-on-macos-error-vector-memory-exhausted-limit-reached
 ```{r}
 fasterize_son_water <- function(var){
   fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |> 
-    writeRaster(here("output", "raster", paste0(var, ".tif")))
+    writeRaster(here("outputs", "raster", paste0(var, ".tif")), overwrite = TRUE)
 }
 ```
 
@@ -84,9 +79,9 @@ fasterize_son_water <- function(var){
 
 ```{r}
 stack_wa <- c(
-  rast(here("output", "raster", "bws_n.tif")),
-  rast(here("output", "raster", "wdp_n.tif")),
-  rast(here("output", "raster", "wsb_n.tif"))
+  rast(here("outputs", "raster", "bws_n.tif")),
+  rast(here("outputs", "raster", "wdp_n.tif")),
+  rast(here("outputs", "raster", "wsb_n.tif"))
 )
 
 names(stack_wa) <- c("bws_n", "wdp_n", "wsb_n")
@@ -94,9 +89,9 @@ names(stack_wa) <- c("bws_n", "wdp_n", "wsb_n")
 
 ```{r}
 stack_wp <- c(
-  rast(here("output", "raster", "cep_n.tif")),
-  rast(here("output", "raster", "nox_n.tif")),
-  rast(here("output", "raster", "pgp_n.tif"))
+  rast(here("outputs", "raster", "cep_n.tif")),
+  rast(here("outputs", "raster", "nox_n.tif")),
+  rast(here("outputs", "raster", "pgp_n.tif"))
 )
 
 names(stack_wp) <- c("cep_n", "nox_n", "pgp_n")
@@ -107,23 +102,23 @@ names(stack_wp) <- c("cep_n", "nox_n", "pgp_n")
 *National level*
 ```{r}
 stack_wa_adm0 <- stack_wa |> 
-  exact_extract(adm0, fun = "weighted_mean", weights = resample(weights_wa, stack_wa), default_weight = 0, append_cols = "adm0_code", progress = TRUE) 
+  exact_extract(adm0, fun = "weighted_mean", weights = resample(weights_wa, stack_wa), default_weight = 0, append_cols = "GID_0", progress = TRUE) 
 ```
 
 ```{r}
 stack_wp_adm0 <- stack_wp |> 
-  exact_extract(adm0, fun = "weighted_mean", weights = resample(weights_wp, stack_wp), default_weight = 0, append_cols = "adm0_code", progress = TRUE) 
+  exact_extract(adm0, fun = "weighted_mean", weights = resample(weights_wp, stack_wp), default_weight = 0, append_cols = "GID_0", progress = TRUE) 
 ```
 
 *Sub-national level*
 ```{r}
 stack_wa_adm1 <- stack_wa |> 
-  exact_extract(adm1, fun = "weighted_mean", weights = resample(weights_wa, stack_wa), default_weight = 0, append_cols = "adm1_code", progress = TRUE) 
+  exact_extract(adm1, fun = "weighted_mean", weights = resample(weights_wa, stack_wa), default_weight = 0, append_cols = "GID_1", progress = TRUE) 
 ```
 
 ```{r}
 stack_wp_adm1 <- stack_wp |> 
-  exact_extract(adm1, fun = "weighted_mean", weights = resample(weights_wp, stack_wp), default_weight = 0, append_cols = "adm1_code", progress = TRUE) 
+  exact_extract(adm1, fun = "weighted_mean", weights = resample(weights_wp, stack_wp), default_weight = 0, append_cols = "GID_1", progress = TRUE) 
 ```
 
 ## 5. Join aggregated values to spatial objects and get max
@@ -149,8 +144,8 @@ get_max <- function(data){
 *National level*
 ```{r}
 son_water_adm0 <- adm0 |> 
-  left_join(stack_wa_adm0, by = "adm0_code") |>
-  left_join(stack_wp_adm0, by = "adm0_code") |>
+  left_join(stack_wa_adm0, by = "GID_0") |>
+  left_join(stack_wp_adm0, by = "GID_0") |>
   get_max()
 ```
 
@@ -163,8 +158,8 @@ son_water_adm0 |>
 *Sub-national level*
 ```{r}
 son_water_adm1 <- adm1 |> 
-  left_join(stack_wa_adm1, by = "adm1_code") |>
-  left_join(stack_wp_adm1, by = "adm1_code") |>
+  left_join(stack_wa_adm1, by = "GID_1") |>
+  left_join(stack_wp_adm1, by = "GID_1") |>
   get_max()
 ```
 
@@ -206,26 +201,26 @@ mapview_custom(son_water_adm1, "Water Pollution (Max)", "wp_max")
 ```{r}
 write.xlsx(list(
   "National level" = st_drop_geometry(son_water_adm0) |> 
-    mutate(notes = if_else(adm0_code %in% c("RUS", "CAN", "CHN", "USA", "BRA", "AUS", "IND", "ARG", "KAZ", "DZA"),
+    mutate(notes = if_else(GID_0 %in% c("RUS", "CAN", "CHN", "USA", "BRA", "AUS", "IND", "ARG", "KAZ", "DZA"),
                            "Not recommended to be used. Average values for such large country are meaningless. Use values from sub-national level instead.", NA)), 
   "Sub-national level" = st_drop_geometry(son_water_adm1)
-), file = here("output", "adm_level", "sbtn_son_water_adm_level.xlsx"), rowNames = FALSE)
+), file = here("outputs", "adm_level", "sbtn_son_water_adm_level.xlsx"), rowNames = FALSE)
 ```
 
 *National level*
 ```{r}
-write_rds(son_water_adm0, here("output", "adm_level", "sbnt_son_water_adm0.rds"))
+write_rds(son_water_adm0, here("outputs", "adm_level", "sbnt_son_water_adm0.rds"))
 ```
 
 ```{r}
-st_write(son_water_adm0, here("output", "adm_level", "sbnt_son_water_adm0.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+# st_write(son_water_adm0, here("outputs", "adm_level", "sbnt_son_water_adm0.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
 
 *Sub-national level*
 ```{r}
-write_rds(son_water_adm1, here("output", "adm_level", "sbnt_son_water_adm1.rds"))
+write_rds(son_water_adm1, here("outputs", "adm_level", "sbnt_son_water_adm1.rds"))
 ```
 
 ```{r}
-st_write(son_water_adm1, here("output", "adm_level", "sbnt_son_water_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+# st_write(son_water_adm1, here("outputs", "adm_level", "sbnt_son_water_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
