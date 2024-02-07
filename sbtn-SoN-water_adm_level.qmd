@@ -169,34 +169,7 @@ son_water_adm1 |>
   skim()
 ```
 
-## 6. View outputs
-
-```{r}
-mapview_custom <- function(data, layer_name, var){
-  mapview(
-    data,
-    layer.name = layer_name,
-    zcol = var,
-    col.regions = colorRampPalette(c("#e9ffbe", "#ffd700", "#cc0000")), # "#e60000"
-    at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
-    lwd = 0.1
-  )
-}
-```
-
-*National level*
-```{r}
-mapview_custom(son_water_adm0, "Water Availability (Max)", "wa_max") +
-mapview_custom(son_water_adm0, "Water Pollution (Max)", "wp_max")
-```
-
-*Sub-national level*
-```{r}
-mapview_custom(son_water_adm1, "Water Availability (Max)", "wa_max") +
-mapview_custom(son_water_adm1, "Water Pollution (Max)", "wp_max")
-```
-
-## 7. Export
+## 6. Export
 
 ```{r}
 write.xlsx(list(
@@ -223,4 +196,44 @@ write_rds(son_water_adm1, here("outputs", "adm_level", "sbnt_son_water_adm1.rds"
 
 ```{r}
 # st_write(son_water_adm1, here("outputs", "adm_level", "sbnt_son_water_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
+
+## 7. View outputs
+
+```{r}
+pacman::p_load(here, dplyr, readr, sf, mapview)
+```
+
+```{r}
+son_water_adm0 <- read_rds(here("outputs", "adm_level", "sbnt_son_water_adm0.rds"))
+son_water_adm1 <- read_rds(here("outputs", "adm_level", "sbnt_son_water_adm1.rds"))
+```
+
+```{r}
+mapview_custom <- function(data, layer_name, var){
+  mapview(
+    data,
+    layer.name = layer_name,
+    zcol = var,
+    col.regions = colorRampPalette(c("#e9ffbe", "#ffd700", "#cc0000")), # "#e60000"
+    at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
+    lwd = 0.1
+  )
+}
+```
+
+*National level*
+```{r}
+son_water_adm0_simplified <- son_water_adm0 |> st_transform("EPSG:8857") |> st_simplify(dTolerance = 1000) |> st_transform("EPSG:4326")
+
+mapview_custom(son_water_adm0_simplified, "Water Availability (Max)", "wa_max") +
+mapview_custom(son_water_adm0_simplified, "Water Pollution (Max)", "wp_max")
+```
+
+*Sub-national level*
+```{r}
+son_water_adm1_simplified <- son_water_adm1 |> st_transform("EPSG:8857") |> st_simplify(dTolerance = 1000) |> st_transform("EPSG:4326")
+
+mapview_custom(son_water_adm1_simplified, "Water Availability (Max)", "wa_max") +
+mapview_custom(son_water_adm1_simplified, "Water Pollution (Max)", "wp_max")
 ```
