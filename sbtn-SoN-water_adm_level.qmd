@@ -177,25 +177,25 @@ write.xlsx(list(
     mutate(notes = if_else(GID_0 %in% c("RUS", "CAN", "CHN", "USA", "BRA", "AUS", "IND", "ARG", "KAZ", "DZA"),
                            "Not recommended to be used. Average values for such large country are meaningless. Use values from sub-national level instead.", NA)), 
   "Sub-national level" = st_drop_geometry(son_water_adm1)
-), file = here("outputs", "adm_level", "sbtn_son_water_adm_level.xlsx"), rowNames = FALSE)
+), file = here("outputs", "adm_level", "sbtn_son_water_v2_adm_level.xlsx"), rowNames = FALSE)
 ```
 
 *National level*
 ```{r}
-write_rds(son_water_adm0, here("outputs", "adm_level", "sbnt_son_water_adm0.rds"))
+write_rds(son_water_adm0, here("outputs", "adm_level", "sbtn_son_water_v2_adm0.rds"))
 ```
 
 ```{r}
-# st_write(son_water_adm0, here("outputs", "adm_level", "sbnt_son_water_adm0.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+# st_write(son_water_adm0, here("outputs", "adm_level", "sbtn_son_water_v2_adm0.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
 
 *Sub-national level*
 ```{r}
-write_rds(son_water_adm1, here("outputs", "adm_level", "sbnt_son_water_adm1.rds"))
+write_rds(son_water_adm1, here("outputs", "adm_level", "sbtn_son_water_v2_adm1.rds"))
 ```
 
 ```{r}
-# st_write(son_water_adm1, here("outputs", "adm_level", "sbnt_son_water_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+# st_write(son_water_adm1, here("outputs", "adm_level", "sbtn_son_water_v2_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
 
 ## 7. View outputs
@@ -205,8 +205,8 @@ pacman::p_load(here, dplyr, readr, sf, mapview)
 ```
 
 ```{r}
-son_water_adm0 <- read_rds(here("outputs", "adm_level", "sbnt_son_water_adm0.rds"))
-son_water_adm1 <- read_rds(here("outputs", "adm_level", "sbnt_son_water_adm1.rds"))
+son_water_adm0 <- read_rds(here("outputs", "adm_level", "sbtn_son_water_adm0.rds"))
+son_water_adm1 <- read_rds(here("outputs", "adm_level", "sbtn_son_water_adm1.rds"))
 ```
 
 ```{r}
