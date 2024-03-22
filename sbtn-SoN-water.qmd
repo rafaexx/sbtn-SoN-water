@@ -404,7 +404,7 @@ son_water |>
   mapview::mapview(
     layer.name = list("Max Water Availability", "Max Water Pollution"),
     zcol = c("wa_max", "wp_max"),
-    col.regions = c("#e9ffbe", "#ffff73", "#ffd700", "#ff5500", "#cc0000"),
+    col.regions = c("#FFFF99", "#FFE600", "#FF9900", "#FF1900", "#990000"),
     lwd = 0.2,
     alpha.regions = 0.9
   )
