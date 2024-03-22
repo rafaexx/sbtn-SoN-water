@@ -97,10 +97,10 @@ wdp_weights <- list.files(here(), pattern = "wdp_weight_", recursive = TRUE) |>
 
 ```{r}
 wsb_weights <- list(
-  rast(here("inputs", "blue_water_footprint", "sectoral", "wfbl_agr_m3y", "w001001.adf")),
-  rast(here("inputs", "blue_water_footprint", "sectoral", "wfbl_dom_m3y", "w001001.adf")),
-  rast(here("inputs", "blue_water_footprint", "sectoral", "wfbl_ind_m3y", "w001001.adf")),
-  rast(here("inputs", "blue_water_footprint", "total", "wfbl_yr_30m", "w001001.adf"))
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_agr_m3y", "w001001.adf")),
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_dom_m3y", "w001001.adf")),
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_ind_m3y", "w001001.adf")),
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "total", "wfbl_yr_30m", "w001001.adf"))
 ) |> 
   set_names("agr", "dom", "ind", "tot")
 ```
