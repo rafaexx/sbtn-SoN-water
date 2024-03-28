@@ -118,17 +118,17 @@ wsb_weights <- list(
 
 ```{r}
 list_wa <- list(
-  rast(here("outputs", "raster", "wdp_n.tif")),
-  rast(here("outputs", "raster", "wsb_n.tif"))
+  rast(here("outputs", "temp_raster", "wdp_n.tif")),
+  rast(here("outputs", "temp_raster", "wsb_n.tif"))
 ) |> 
   set_names("wdp_n", "wsb_n")
 ```
 
 ```{r}
 list_wp <- list(
-  rast(here("outputs", "raster", "cep_n.tif")),
-  rast(here("outputs", "raster", "nox_n.tif")),
-  rast(here("outputs", "raster", "pgp_n.tif"))
+  rast(here("outputs", "temp_raster", "cep_n.tif")),
+  rast(here("outputs", "temp_raster", "nox_n.tif")),
+  rast(here("outputs", "temp_raster", "pgp_n.tif"))
 ) |> 
   set_names("cep_n", "nox_n", "pgp_n")
 ```
