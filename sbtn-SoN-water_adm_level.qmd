@@ -188,6 +188,13 @@ son_water_adm0 <- adm0 |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$dom, wsb_dom, adm0, "GID_0"), by = "GID_0") |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$ind, wsb_ind, adm0, "GID_0"), by = "GID_0") |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm0, "GID_0"), by = "GID_0") |> 
+  # coastal eutrophication potential (cep)
+  left_join(exact_extract(list_wp$cep_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(cep_n = mean), by = "GID_0") |>
+  # nitrate-nitrite concentration (nox)
+  left_join(exact_extract(list_wp$nox_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(nox_n = mean), by = "GID_0") |>
+  # periphyton growth potential (pgp)
+  left_join(exact_extract(list_wp$pgp_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(pgp_n = mean), by = "GID_0") |>
+  
   mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
   rowwise() |> 
   mutate(
@@ -196,10 +203,11 @@ son_water_adm0 <- adm0 |>
     wa_max_ind = max(c(bws_ind, wdp_ind, wsb_ind), na.rm = TRUE),
     wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
     wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
-    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE)
+    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
+    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE)
   ) |> 
   ungroup() |> 
-  relocate(wa_max_n:wa_max_tot, .before = bws_n) |>
+  relocate(wa_max_n:wp_max_n, .before = bws_n) |>
   relocate(geometry, .after = last_col()) |> 
   mutate(across(where(is.numeric), ~ if_else(between(.x, 1, 5), .x, NA)))
 ```
@@ -261,6 +269,13 @@ son_water_adm1 <- adm1 |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$dom, wsb_dom, adm1, "GID_1"), by = "GID_1") |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$ind, wsb_ind, adm1, "GID_1"), by = "GID_1") |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm1, "GID_1"), by = "GID_1") |> 
+  # coastal eutrophication potential (cep)
+  left_join(exact_extract(list_wp$cep_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(cep_n = mean), by = "GID_1") |>
+  # nitrate-nitrite concentration (nox)
+  left_join(exact_extract(list_wp$nox_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(nox_n = mean), by = "GID_1") |>
+  # periphyton growth potential (pgp)
+  left_join(exact_extract(list_wp$pgp_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(pgp_n = mean), by = "GID_1") |>
+  
   mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
   rowwise() |> 
   mutate(
@@ -269,10 +284,11 @@ son_water_adm1 <- adm1 |>
     wa_max_ind = max(c(bws_ind, wdp_ind, wsb_ind), na.rm = TRUE),
     wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
     wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
-    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE)
+    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
+    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE)
   ) |> 
   ungroup() |> 
-  relocate(wa_max_n:wa_max_tot, .before = bws_n) |>
+  relocate(wa_max_n:wp_max_n, .before = bws_n) |>
   relocate(geometry, .after = last_col()) |> 
   mutate(across(where(is.numeric), ~ if_else(between(.x, 1, 5), .x, NA)))
 ```
