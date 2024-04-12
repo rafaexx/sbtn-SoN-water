@@ -109,11 +109,11 @@ wsb_weights <- list(
 
 ```{r}
 # fasterize_son_water <- function(var){
-#   fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |> 
+#   fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |>
 #     writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
 # }
 # 
-# map(list("wdp_n", "wsb_n", cep_n, "nox_n", "pgp_n"), fasterize_son_water)
+# map(list("wdp_n", "wsb_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
 ```
 
 ```{r}
