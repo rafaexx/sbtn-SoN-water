@@ -301,7 +301,36 @@ st_drop_geometry(son_water_adm1) |>
 ## 6. Export
 
 ```{r}
+key_descriptions <- tribble(
+  ~Key,    ~Description,     
+  "wa_max",    "Maximum value between water availability layers: bws, wdp, wsb", 
+  "wp_max",  "Maximum value between water pollution layers: cep, nox, pgp", 
+  "bws","Baseline Water Stress",     
+  "wdp","Water depletion",      
+  "wsb","Blue Water Scarcity",
+  "cep","Coastal Eutrophication Potential",
+  "nox","Nitrate-Nitrite Concentration",
+  "pgp","Periphyton Growth Potential",
+  "","",
+  "","",
+  "Suffix","Description",
+  "_n","Aggregation at adm level, without weighting",
+  "_dom","Aggregation at adm level weighted by domestic water demand*",
+  "_ind","Aggregation at adm level weighted by industrial water demand*",
+  "_irr","Aggregation at adm level weighted by irrigation water demand*",
+  "_liv","Aggregation at adm level weighted by livestock water demand*",
+  "_tot","Aggregation at adm level weighted by total water demand*",
+  "","",
+  "", "* The data for 'water demand' differs depending on the indicator aggregated",
+  "bws","Water withdrawal from PCR-GLOBWB 2",
+  "wdp","Water consumption from WaterGAP 3",
+  "wsb","Blue water footprint from Water Footprint Network"
+)
+```
+
+```{r}
 write.xlsx(list(
+  "Help" = key_descriptions,
   "National level" = st_drop_geometry(son_water_adm0) |> 
     mutate(notes = if_else(GID_0 %in% c("RUS", "CAN", "CHN", "USA", "BRA", "AUS", "IND", "ARG", "KAZ", "DZA"),
                            "Not recommended to be used. Average values for such large country are not representative. Use values from sub-national level instead.", NA)), 
