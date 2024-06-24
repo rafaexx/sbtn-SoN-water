@@ -17,7 +17,7 @@ Load required packages
 
 ```{r}
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(here, dplyr, magrittr, sf, terra, stars, exactextractr, skimr, readr, tidyr, openxlsx)
+pacman::p_load(here, dplyr, magrittr, sf, terra, stars, exactextractr, skimr, readr, tidyr, openxlsx, mapview)
 ```
 
 ```{r}
@@ -399,7 +399,7 @@ son_water |>
   st_simplify(dTolerance = 10000) |> 
   st_transform(st_crs(son_water)) |> 
   mutate(across(c(wa_max, wp_max), ~ as.factor(.x))) |> 
-  mapview::mapview(
+  mapview(
     layer.name = list("Max Water Availability", "Max Water Pollution"),
     zcol = c("wa_max", "wp_max"),
     col.regions = c("#FFFF99", "#FFE600", "#FF9900", "#FF1900", "#990000"),
