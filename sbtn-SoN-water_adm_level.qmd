@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution - National and Sub-national level, weighted by sector"
 author: "Rafael Camargo"
-date: "Mar 22, 2024"
+date: "Jun 25, 2024"
 engine: knitr
 format:
   html:
@@ -105,6 +105,40 @@ wsb_weights <- list(
   set_names("agr", "dom", "ind", "tot")
 ```
 
+### 3.2. N and P fertilizer use as weights for water pollution indicators
+
+```{r}
+n_use <- rast(here("inputs", "n_p_fertilizer_use", "Nfer_ASCII", "nfery2013.asc"))
+```
+
+```{r}
+p_use <- rast(here("inputs", "n_p_fertilizer_use", "Pfer_ASCII", "pfery2013.asc"))
+```
+
+*Recode outliers*
+```{r}
+n_cap <- quantile(values(n_use), probs = 0.9998, na.rm = TRUE)
+p_cap <- quantile(values(p_use), probs = 0.9998, na.rm = TRUE)
+```
+
+```{r}
+n_use[n_use > n_cap] <- n_cap
+p_use[p_use > p_cap] <- p_cap
+```
+
+*Normalise datasets and put N & P together*
+```{r}
+min_max_scale <- function(raster) {
+  min_val <- min(values(raster), na.rm = TRUE)
+  max_val <- max(values(raster), na.rm = TRUE)
+  (raster - min_val) / (max_val - min_val)
+}
+```
+
+```{r}
+wp_weights <- app(c(min_max_scale(n_use), min_max_scale(p_use)), fun = mean, na.rm = TRUE)
+```
+
 ## 4. Rasterize SoN water layers
 
 ```{r}
@@ -190,10 +224,13 @@ son_water_adm0 <- adm0 |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm0, "GID_0"), by = "GID_0") |> 
   # coastal eutrophication potential (cep)
   left_join(exact_extract(list_wp$cep_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(cep_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wp$cep_n, wp_weights, cep_agr, adm0, "GID_0"), by = "GID_0") |>
   # nitrate-nitrite concentration (nox)
   left_join(exact_extract(list_wp$nox_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(nox_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wp$nox_n, wp_weights, nox_agr, adm0, "GID_0"), by = "GID_0") |>
   # periphyton growth potential (pgp)
   left_join(exact_extract(list_wp$pgp_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(pgp_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wp$pgp_n, wp_weights, pgp_agr, adm0, "GID_0"), by = "GID_0") |>
   
   mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
   rowwise() |> 
@@ -204,10 +241,12 @@ son_water_adm0 <- adm0 |>
     wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
     wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
     wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
-    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE)
+    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_max_agr = max(c(cep_agr, nox_agr, pgp_agr), na.rm = TRUE)
   ) |> 
   ungroup() |> 
-  relocate(wa_max_n:wp_max_n, .before = bws_n) |>
+  relocate(wa_max_n:wa_max_tot, .before = bws_n) |>
+  relocate(wp_max_n:wp_max_agr, .before = cep_n) |> 
   relocate(geometry, .after = last_col()) |> 
   mutate(across(where(is.numeric), ~ if_else(between(.x, 1, 5), .x, NA)))
 ```
@@ -271,10 +310,13 @@ son_water_adm1 <- adm1 |>
   left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm1, "GID_1"), by = "GID_1") |> 
   # coastal eutrophication potential (cep)
   left_join(exact_extract(list_wp$cep_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(cep_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wp$cep_n, wp_weights, cep_agr, adm1, "GID_1"), by = "GID_1") |>
   # nitrate-nitrite concentration (nox)
   left_join(exact_extract(list_wp$nox_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(nox_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wp$nox_n, wp_weights, nox_agr, adm1, "GID_1"), by = "GID_1") |>
   # periphyton growth potential (pgp)
   left_join(exact_extract(list_wp$pgp_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(pgp_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wp$pgp_n, wp_weights, pgp_agr, adm1, "GID_1"), by = "GID_1") |>
   
   mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
   rowwise() |> 
@@ -285,10 +327,12 @@ son_water_adm1 <- adm1 |>
     wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
     wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
     wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
-    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE)
+    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_max_agr = max(c(cep_agr, nox_agr, pgp_agr), na.rm = TRUE)
   ) |> 
   ungroup() |> 
-  relocate(wa_max_n:wp_max_n, .before = bws_n) |>
+  relocate(wa_max_n:wa_max_tot, .before = bws_n) |>
+  relocate(wp_max_n:wp_max_agr, .before = cep_n) |> 
   relocate(geometry, .after = last_col()) |> 
   mutate(across(where(is.numeric), ~ if_else(between(.x, 1, 5), .x, NA)))
 ```
@@ -320,6 +364,7 @@ key_descriptions <- tribble(
   "_irr","Aggregation at adm level weighted by irrigation water demand*",
   "_liv","Aggregation at adm level weighted by livestock water demand*",
   "_tot","Aggregation at adm level weighted by total water demand*",
+  "_agr","Aggregation at adm level weighted by N & P fertilizer use in agricultural practices (https://doi.org/10.5194/essd-9-181-2017)",
   "","",
   "", "* The data for 'water demand' differs depending on the indicator aggregated",
   "bws","Water withdrawal from PCR-GLOBWB 2",
@@ -371,7 +416,7 @@ mapview_custom <- function(data, layer_name, var){
     data,
     layer.name = layer_name,
     zcol = var,
-    col.regions = colorRampPalette(c("#FFFF99", "#FF9900", "#990000")),
+    col.regions = colorRampPalette(c("#FFFF99", "#FFE600", "#FF9900", "#FF1900", "#990000")),
     at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
     lwd = 0.1
   )
@@ -391,6 +436,10 @@ son_water_adm0_simplified <- son_water_adm0 |>
 mapview_custom(son_water_adm0_simplified, "Water Availability (Max)", "wa_max_tot")
 ```
 
+```{r}
+mapview_custom(son_water_adm0_simplified, "Water Pollution (Max)", "wp_max_agr")
+```
+
 *Sub-national level*
 
 ```{r}
@@ -402,4 +451,8 @@ son_water_adm1_simplified <- son_water_adm1 |>
 
 ```{r}
 mapview_custom(son_water_adm1_simplified, "Water Availability (Max)", "wa_max_tot")
+```
+
+```{r}
+mapview_custom(son_water_adm1_simplified, "Water Pollution (Max)", "wp_max_agr")
 ```
