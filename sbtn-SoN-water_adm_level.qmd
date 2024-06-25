@@ -59,32 +59,32 @@ adm1 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm1_100m.shp"))
 ### 3.1. WaterGap3 water consumption as weights for water depletion
 
 ```{r}
-# waterGap3_consumption <- read_csv(
-#   here("inputs", "water_depletion", "SectorConsumption_m3_annual.csv"),
-#   col_names = c("subBas_ID", "domestic", "manufacturing", "electric", "irrigation", "livestock")
-# )
-# 
-# waterGap3_consumption <- read_sf(here("inputs", "water_depletion", "WaterGap3Shape", "WaterGap3_AllBasins.shp")) |> 
-#   dplyr::select(subBas_ID = ContUID) |> 
-#   inner_join(waterGap3_consumption, by = "subBas_ID") |> 
-#   mutate(
-#     industrial = manufacturing + electric,
-#     total = domestic + irrigation + livestock + industrial 
-#   ) |> 
-#   dplyr::select(
-#     dom = domestic,
-#     ind = industrial,
-#     irr = irrigation,
-#     liv = livestock,
-#     tot = total
-#   )
-# 
-# fasterize_vars <- function(var){
-#   fasterize(waterGap3_consumption, raster(waterGap3_consumption, res = 0.01), field = var, fun = "max") |> 
-#     writeRaster(here("outputs", "temp_raster", paste0("wdp_weight_", var, ".tif")), overwrite = TRUE)
-# }
-# 
-# map(list("dom", "ind", "irr", "liv", "tot"), fasterize_vars)
+waterGap3_consumption <- read_csv(
+  here("inputs", "water_depletion", "SectorConsumption_m3_annual.csv"),
+  col_names = c("subBas_ID", "domestic", "manufacturing", "electric", "irrigation", "livestock")
+)
+
+waterGap3_consumption <- read_sf(here("inputs", "water_depletion", "WaterGap3Shape", "WaterGap3_AllBasins.shp")) |>
+  dplyr::select(subBas_ID = ContUID) |>
+  inner_join(waterGap3_consumption, by = "subBas_ID") |>
+  mutate(
+    industrial = manufacturing + electric,
+    total = domestic + irrigation + livestock + industrial
+  ) |>
+  dplyr::select(
+    dom = domestic,
+    ind = industrial,
+    irr = irrigation,
+    liv = livestock,
+    tot = total
+  )
+
+fasterize_vars <- function(var){
+  fasterize(waterGap3_consumption, raster(waterGap3_consumption, res = 0.01), field = var, fun = "max") |>
+    writeRaster(here("outputs", "temp_raster", paste0("wdp_weight_", var, ".tif")), overwrite = TRUE)
+}
+
+map(list("dom", "ind", "irr", "liv", "tot"), fasterize_vars)
 ```
 
 ```{r}
@@ -142,12 +142,12 @@ wp_weights <- app(c(min_max_scale(n_use), min_max_scale(p_use)), fun = mean, na.
 ## 4. Rasterize SoN water layers
 
 ```{r}
-# fasterize_son_water <- function(var){
-#   fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |>
-#     writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
-# }
-# 
-# map(list("wdp_n", "wsb_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
+fasterize_son_water <- function(var){
+  fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |>
+    writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
+}
+
+map(list("wdp_n", "wsb_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
 ```
 
 ```{r}
