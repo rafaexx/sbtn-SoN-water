@@ -56,7 +56,7 @@ adm1 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm1_100m.shp"))
 
 ## 3. Prepare data to use as weights
 
-### 3.1. WaterGap3 water consumption as weights for water depletion
+### 3.1. WaterGap3 water consumption as weights for water depletion (provided by the authors)
 
 ```{r}
 waterGap3_consumption <- read_csv(
@@ -93,7 +93,7 @@ wdp_weights <- list.files(here(), pattern = "wdp_weight_", recursive = TRUE) |>
   set_names("dom", "ind", "irr", "liv", "tot")
 ```
 
-### 3.2. Water Footprint Network Blue water footprint as weights for blue water scarcity
+### 3.2. Water Footprint Network Blue water footprint as weights for blue water scarcity (provided by the authors)
 
 ```{r}
 wsb_weights <- list(
@@ -105,7 +105,7 @@ wsb_weights <- list(
   set_names("agr", "dom", "ind", "tot")
 ```
 
-### 3.2. N and P fertilizer use as weights for water pollution indicators
+### 3.2. N and P fertilizer use as weights for water pollution indicators [Lu & Tian 2016](https://doi.pangaea.de/10.1594/PANGAEA.863323)
 
 ```{r}
 n_use <- rast(here("inputs", "n_p_fertilizer_use", "Nfer_ASCII", "nfery2013.asc"))
