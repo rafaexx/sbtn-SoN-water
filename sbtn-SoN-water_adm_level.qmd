@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution - National and Sub-national level, weighted by sector"
 author: "Rafael Camargo"
-date: "Jun 25, 2024"
+date: "July 2, 2024"
 engine: knitr
 format:
   html:
@@ -96,7 +96,7 @@ wdp_weights <- list.files(here(), pattern = "wdp_weight_", recursive = TRUE) |>
 ### 3.2. Water Footprint Network Blue water footprint as weights for blue water scarcity (provided by the authors)
 
 ```{r}
-wsb_weights <- list(
+bwr_weights <- list(
   rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_agr_m3y", "w001001.adf")),
   rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_dom_m3y", "w001001.adf")),
   rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_ind_m3y", "w001001.adf")),
@@ -147,15 +147,15 @@ fasterize_son_water <- function(var){
     writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
 }
 
-map(list("wdp_n", "wsb_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
+map(list("wdp_n", "bwr_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
 ```
 
 ```{r}
 list_wa <- list(
   rast(here("outputs", "temp_raster", "wdp_n.tif")),
-  rast(here("outputs", "temp_raster", "wsb_n.tif"))
+  rast(here("outputs", "temp_raster", "bwr_n.tif"))
 ) |> 
-  set_names("wdp_n", "wsb_n")
+  set_names("wdp_n", "bwr_n")
 ```
 
 ```{r}
@@ -216,12 +216,12 @@ son_water_adm0 <- adm0 |>
   left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$irr, wdp_irr, adm0, "GID_0"), by = "GID_0") |>
   left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$liv, wdp_liv, adm0, "GID_0"), by = "GID_0") |>
   left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$tot, wdp_tot, adm0, "GID_0"), by = "GID_0") |>
-  # blue water scarcity (wsb)
-  left_join(exact_extract(list_wa$wsb_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(wsb_n = mean), by = "GID_0") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$agr, wsb_agr, adm0, "GID_0"), by = "GID_0") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$dom, wsb_dom, adm0, "GID_0"), by = "GID_0") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$ind, wsb_ind, adm0, "GID_0"), by = "GID_0") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm0, "GID_0"), by = "GID_0") |> 
+  # blue water reduction (bwr)
+  left_join(exact_extract(list_wa$bwr_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(bwr_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$agr, bwr_agr, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$dom, bwr_dom, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$ind, bwr_ind, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$tot, bwr_tot, adm0, "GID_0"), by = "GID_0") |> 
   # coastal eutrophication potential (cep)
   left_join(exact_extract(list_wp$cep_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(cep_n = mean), by = "GID_0") |>
   left_join(aggregate_to_adm(list_wp$cep_n, wp_weights, cep_agr, adm0, "GID_0"), by = "GID_0") |>
@@ -235,12 +235,12 @@ son_water_adm0 <- adm0 |>
   mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
   rowwise() |> 
   mutate(
-    wa_max_n = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
-    wa_max_dom = max(c(bws_dom, wdp_dom, wsb_dom), na.rm = TRUE),
-    wa_max_ind = max(c(bws_ind, wdp_ind, wsb_ind), na.rm = TRUE),
-    wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
-    wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
-    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
+    wa_max_n = max(c(bws_n, wdp_n, bwr_n), na.rm = TRUE),
+    wa_max_dom = max(c(bws_dom, wdp_dom, bwr_dom), na.rm = TRUE),
+    wa_max_ind = max(c(bws_ind, wdp_ind, bwr_ind), na.rm = TRUE),
+    wa_max_irr = max(c(bws_irr, wdp_irr, bwr_agr), na.rm = TRUE),
+    wa_max_liv = max(c(bws_liv, wdp_liv, bwr_n), na.rm = TRUE),
+    wa_max_tot = max(c(bws_tot, wdp_tot, bwr_tot), na.rm = TRUE),
     wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
     wp_max_agr = max(c(cep_agr, nox_agr, pgp_agr), na.rm = TRUE)
   ) |> 
@@ -302,12 +302,12 @@ son_water_adm1 <- adm1 |>
   left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$irr, wdp_irr, adm1, "GID_1"), by = "GID_1") |>
   left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$liv, wdp_liv, adm1, "GID_1"), by = "GID_1") |>
   left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$tot, wdp_tot, adm1, "GID_1"), by = "GID_1") |>
-  # blue water scarcity (wsb)
-  left_join(exact_extract(list_wa$wsb_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(wsb_n = mean), by = "GID_1") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$agr, wsb_agr, adm1, "GID_1"), by = "GID_1") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$dom, wsb_dom, adm1, "GID_1"), by = "GID_1") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$ind, wsb_ind, adm1, "GID_1"), by = "GID_1") |>
-  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm1, "GID_1"), by = "GID_1") |> 
+  # blue water reduction (bwr)
+  left_join(exact_extract(list_wa$bwr_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(bwr_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$agr, bwr_agr, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$dom, bwr_dom, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$ind, bwr_ind, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$bwr_n, bwr_weights$tot, bwr_tot, adm1, "GID_1"), by = "GID_1") |> 
   # coastal eutrophication potential (cep)
   left_join(exact_extract(list_wp$cep_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(cep_n = mean), by = "GID_1") |>
   left_join(aggregate_to_adm(list_wp$cep_n, wp_weights, cep_agr, adm1, "GID_1"), by = "GID_1") |>
@@ -321,12 +321,12 @@ son_water_adm1 <- adm1 |>
   mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
   rowwise() |> 
   mutate(
-    wa_max_n = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
-    wa_max_dom = max(c(bws_dom, wdp_dom, wsb_dom), na.rm = TRUE),
-    wa_max_ind = max(c(bws_ind, wdp_ind, wsb_ind), na.rm = TRUE),
-    wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
-    wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
-    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
+    wa_max_n = max(c(bws_n, wdp_n, bwr_n), na.rm = TRUE),
+    wa_max_dom = max(c(bws_dom, wdp_dom, bwr_dom), na.rm = TRUE),
+    wa_max_ind = max(c(bws_ind, wdp_ind, bwr_ind), na.rm = TRUE),
+    wa_max_irr = max(c(bws_irr, wdp_irr, bwr_agr), na.rm = TRUE),
+    wa_max_liv = max(c(bws_liv, wdp_liv, bwr_n), na.rm = TRUE),
+    wa_max_tot = max(c(bws_tot, wdp_tot, bwr_tot), na.rm = TRUE),
     wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
     wp_max_agr = max(c(cep_agr, nox_agr, pgp_agr), na.rm = TRUE)
   ) |> 
@@ -351,7 +351,7 @@ key_descriptions <- tribble(
   "wp_max",  "Maximum value between water pollution layers: cep, nox, pgp", 
   "bws","Baseline Water Stress",     
   "wdp","Water depletion",      
-  "wsb","Blue Water Scarcity",
+  "bwr","Blue Water Reduction Target",
   "cep","Coastal Eutrophication Potential",
   "nox","Nitrate-Nitrite Concentration",
   "pgp","Periphyton Growth Potential",
@@ -369,7 +369,7 @@ key_descriptions <- tribble(
   "", "* The data for 'water demand' differs depending on the indicator aggregated",
   "bws","Water withdrawal from PCR-GLOBWB 2",
   "wdp","Water consumption from WaterGAP 3",
-  "wsb","Blue water footprint from Water Footprint Network"
+  "bwr","Blue water footprint from Water Footprint Network"
 )
 ```
 
