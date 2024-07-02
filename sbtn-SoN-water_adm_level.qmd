@@ -319,7 +319,7 @@ st_drop_geometry(son_water_adm1) |>
 ```{r}
 key_descriptions <- tribble(
   ~Key,    ~Description,     
-  "wa_max",    "Maximum value between water availability layers: bws, wdp, wsb", 
+  "wa_max",    "Maximum value between water availability layers: bws, wdp, bwr", 
   "wp_max",  "Maximum value between water pollution layers: cep, nox, pgp", 
   "bws","Baseline Water Stress",     
   "wdp","Water depletion",      
@@ -330,18 +330,19 @@ key_descriptions <- tribble(
   "","",
   "","",
   "Suffix","Description",
-  "_n","Aggregation at adm level, without weighting",
-  "_dom","Aggregation at adm level weighted by domestic water demand*",
-  "_ind","Aggregation at adm level weighted by industrial water demand*",
-  "_irr","Aggregation at adm level weighted by irrigation water demand*",
-  "_liv","Aggregation at adm level weighted by livestock water demand*",
-  "_tot","Aggregation at adm level weighted by total water demand*",
-  "_agr","Aggregation at adm level weighted by crop extent (https://www.nature.com/articles/s43016-021-00429-z)",
+  "_n","Aggregation at administrative level, without weighting",
+  "_dom","Aggregation at administrative level weighted by domestic water demand*",
+  "_ind","Aggregation at administrative level weighted by industrial water demand*",
+  "_irr","Aggregation at administrative level weighted by irrigation water demand*",
+  "_liv","Aggregation at administrative level weighted by livestock water demand*",
+  "_tot","Aggregation at administrative level weighted by total water demand*",
+  "_agr","Aggregation at administrative level weighted by cropland extent**",
   "","",
-  "", "* The data for 'water demand' differs depending on the indicator aggregated",
+  "", "* Data for 'water demand' differs depending on the indicator aggregated",
   "bws","Water withdrawal from PCR-GLOBWB 2",
   "wdp","Water consumption from WaterGAP 3",
-  "bwr","Blue water footprint from Water Footprint Network"
+  "bwr","Blue water footprint from Water Footprint Network",
+  "", "** For the water pollution indicators we used cropland extend from Potapov et al. 2021 (https://www.nature.com/articles/s43016-021-00429-z)"
 )
 ```
 
