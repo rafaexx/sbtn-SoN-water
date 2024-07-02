@@ -54,9 +54,37 @@ adm0 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm0_100m.shp"))
 adm1 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm1_100m.shp"))
 ```
 
-## 3. Prepare data to use as weights
+## 3. Rasterize SoN water layers
 
-### 3.1. WaterGap3 water consumption as weights for water depletion (provided by the authors)
+```{r}
+fasterize_son_water <- function(var){
+  fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |>
+    writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
+}
+
+map(list("wdp_n", "bwr_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
+```
+
+```{r}
+list_wa <- list(
+  rast(here("outputs", "temp_raster", "wdp_n.tif")),
+  rast(here("outputs", "temp_raster", "bwr_n.tif"))
+) |> 
+  set_names("wdp_n", "bwr_n")
+```
+
+```{r}
+list_wp <- list(
+  rast(here("outputs", "temp_raster", "cep_n.tif")),
+  rast(here("outputs", "temp_raster", "nox_n.tif")),
+  rast(here("outputs", "temp_raster", "pgp_n.tif"))
+) |> 
+  set_names("cep_n", "nox_n", "pgp_n")
+```
+
+## 4. Prepare data to use as weights
+
+### 4.1. WaterGap3 water consumption as weights for water depletion (provided by the authors)
 
 ```{r}
 waterGap3_consumption <- read_csv(
@@ -93,7 +121,7 @@ wdp_weights <- list.files(here(), pattern = "wdp_weight_", recursive = TRUE) |>
   set_names("dom", "ind", "irr", "liv", "tot")
 ```
 
-### 3.2. Water Footprint Network Blue water footprint as weights for blue water scarcity (provided by the authors)
+### 4.2. Water Footprint Network Blue water footprint as weights for blue water scarcity (provided by the authors)
 
 ```{r}
 bwr_weights <- list(
@@ -105,7 +133,7 @@ bwr_weights <- list(
   set_names("agr", "dom", "ind", "tot")
 ```
 
-### 3.2. N and P fertilizer use as weights for water pollution indicators [Lu & Tian 2016](https://doi.pangaea.de/10.1594/PANGAEA.863323)
+### 4.3. N and P fertilizer use as weights for water pollution indicators [Lu & Tian 2016](https://doi.pangaea.de/10.1594/PANGAEA.863323)
 
 ```{r}
 n_use <- rast(here("inputs", "n_p_fertilizer_use", "Nfer_ASCII", "nfery2013.asc"))
@@ -137,34 +165,6 @@ min_max_scale <- function(raster) {
 
 ```{r}
 wp_weights <- app(c(min_max_scale(n_use), min_max_scale(p_use)), fun = mean, na.rm = TRUE)
-```
-
-## 4. Rasterize SoN water layers
-
-```{r}
-fasterize_son_water <- function(var){
-  fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |>
-    writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
-}
-
-map(list("wdp_n", "bwr_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
-```
-
-```{r}
-list_wa <- list(
-  rast(here("outputs", "temp_raster", "wdp_n.tif")),
-  rast(here("outputs", "temp_raster", "bwr_n.tif"))
-) |> 
-  set_names("wdp_n", "bwr_n")
-```
-
-```{r}
-list_wp <- list(
-  rast(here("outputs", "temp_raster", "cep_n.tif")),
-  rast(here("outputs", "temp_raster", "nox_n.tif")),
-  rast(here("outputs", "temp_raster", "pgp_n.tif"))
-) |> 
-  set_names("cep_n", "nox_n", "pgp_n")
 ```
 
 ## 5. Spatial aggregation to administrative divisions
