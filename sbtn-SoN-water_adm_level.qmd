@@ -133,38 +133,10 @@ bwr_weights <- list(
   set_names("agr", "dom", "ind", "tot")
 ```
 
-### 4.3. N and P fertilizer use as weights for water pollution indicators [Lu & Tian 2016](https://doi.pangaea.de/10.1594/PANGAEA.863323)
+### 4.3. Global Cropland Extent (2019) [Potapov et al. 2021](https://glad.umd.edu/dataset/croplands)
 
 ```{r}
-n_use <- rast(here("inputs", "n_p_fertilizer_use", "Nfer_ASCII", "nfery2013.asc"))
-```
-
-```{r}
-p_use <- rast(here("inputs", "n_p_fertilizer_use", "Pfer_ASCII", "pfery2013.asc"))
-```
-
-*Recode outliers*
-```{r}
-n_cap <- quantile(values(n_use), probs = 0.9998, na.rm = TRUE)
-p_cap <- quantile(values(p_use), probs = 0.9998, na.rm = TRUE)
-```
-
-```{r}
-n_use[n_use > n_cap] <- n_cap
-p_use[p_use > p_cap] <- p_cap
-```
-
-*Normalise datasets and put N & P together*
-```{r}
-min_max_scale <- function(raster) {
-  min_val <- min(values(raster), na.rm = TRUE)
-  max_val <- max(values(raster), na.rm = TRUE)
-  (raster - min_val) / (max_val - min_val)
-}
-```
-
-```{r}
-wp_weights <- app(c(min_max_scale(n_use), min_max_scale(p_use)), fun = mean, na.rm = TRUE)
+wp_weights <- rast(here("inputs", "global_cropland_extent", "Global_cropland_3km_2019.tif"))
 ```
 
 ## 5. Spatial aggregation to administrative divisions
@@ -364,7 +336,7 @@ key_descriptions <- tribble(
   "_irr","Aggregation at adm level weighted by irrigation water demand*",
   "_liv","Aggregation at adm level weighted by livestock water demand*",
   "_tot","Aggregation at adm level weighted by total water demand*",
-  "_agr","Aggregation at adm level weighted by N & P fertilizer use in agricultural practices (https://doi.org/10.5194/essd-9-181-2017)",
+  "_agr","Aggregation at adm level weighted by crop extent (https://www.nature.com/articles/s43016-021-00429-z)",
   "","",
   "", "* The data for 'water demand' differs depending on the indicator aggregated",
   "bws","Water withdrawal from PCR-GLOBWB 2",
