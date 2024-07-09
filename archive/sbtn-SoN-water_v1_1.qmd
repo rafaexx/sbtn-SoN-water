@@ -1,0 +1,425 @@
+---
+title: "SBTN State of Nature Water unified layers"
+subtitle: "water availability and water pollution"
+author: "Rafael Camargo"
+date: "Apr 12, 2024"
+engine: knitr
+format:
+  html:
+    toc: true
+execute:
+  warning: false    
+---
+
+## 1. Setup
+
+Load required packages
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(here, dplyr, magrittr, sf, terra, stars, exactextractr, skimr, readr, tidyr, openxlsx, mapview)
+```
+
+```{r}
+sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
+```
+
+## 2. Load data
+
+### 2.1. Water Availability
+
+#### 2.1.1. Baseline Water Stress [Kuzma et al. 2023](https://www.wri.org/data/aqueduct-global-maps-40-data)
+
+```{r}
+bws <- st_read(here("inputs", "aqueduct40", "GDB", "Aq40_Y2023D07M05.gdb"), layer = "baseline_annual")
+```
+
+#### 2.1.2. Water Depletion [Brauman et al. 2016](http://www.earthstat.org/water-depletion-watergap3-basins/)
+
+```{r}
+wdp <- rast(here("inputs", "water_depletion", "WaterDepletionCat_WG3.tif"))
+```
+
+#### 2.1.3. Blue Water Scarcity [Hoekstra & Mekonnen 2011](https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip)
+
+```{r}
+wsb <- rast(here("inputs", "blue_water_scarcity", "raster", "ws_avg.tif"))
+```
+
+### 2.2. Water Pollution
+
+#### 2.2.1. Coastal Eutrophication Potential [Kuzma et al. 2023](https://www.wri.org/data/aqueduct-global-maps-40-data)
+
+```{r}
+cep <- bws
+```
+
+#### 2.2.2. Nitrate-Nitrite Concentration [Damania et al. 2019](https://wbwaterdata.org/dataset/global-nitrate-nitrite-surface-water)
+
+```{r}
+nox_csv <- read_csv(here("inputs", "nitrate_nitrite", "noxn_preds_05_16_19.csv"))
+```
+
+*Spatial grid*
+```{r}
+sp_grid <- read_csv(here("inputs", "nitrate_nitrite", "ML_data_gridcell_match.csv"))
+```
+
+#### 2.2.3. Periphyton Growth Potential [McDowell et al. 2020](https://figshare.com/s/e44fe7319585183d888f)
+
+*Total Nitrogen Concentration*
+```{r}
+tnc <- rast(here("inputs", "periphyton_growth_potential", "TN_Conc.tif"))
+```
+
+*Total Phosphorus Concentration*
+```{r}
+tpc <- rast(here("inputs", "periphyton_growth_potential", "TP_Conc.tif"))
+```
+
+### 2.3. Aggregation unit
+
+#### 2.3.1. WMO Basins and Sub-Basins [GRDC 2020](https://panda.maps.arcgis.com/home/item.html?id=be4b6f13121b4670ad8f006bc1908e14)
+
+*To add name of basins*
+```{r}
+# wmo_basins <- st_read(here("inputs", "wmo_basins", "wmobb_basins.shp")) |> 
+#   select(WMOBB_id = WMOBB, WMOBB_name = WMOBBName, region = REGNAME)
+```
+
+#### 2.3.2. HydroSHEDS HydroBASINS Level 6 [Lehner & Grill 2013](https://www.hydrosheds.org/products/hydrobasins)
+
+```{r}
+# h6 <- st_read(here("inputs", "hydrosheds", "hybas_lev06_v1c.shp")) |>
+#   select(HYBAS_ID) |>
+#   mutate(HYBAS_ID = as.factor(HYBAS_ID)) |>
+#   st_join(wmo_basins, largest = TRUE)
+```
+
+#### 2.3.3. Export / Fast load
+
+```{r}
+# write_rds(h6, here("outputs", "h6.rds"))
+h6 <- read_rds(here("outputs", "h6.rds"))
+```
+
+## 3. Clean and Classify data to 1-5 values
+
+### 3.1. Water Availability
+
+#### 3.1.1. Baseline Water Stress
+
+```{r}
+bws_n <- bws |>
+  mutate(
+    bws_raw = na_if(bws_raw, -9999),
+    bws_raw = na_if(bws_raw, 9999),
+    bws_n = case_when(
+      bws_label == "Low (<10%)" ~ 1,
+      bws_label == "Low - Medium (10-20%)" ~ 2,
+      bws_label == "Medium - High (20-40%)" ~ 3,
+      bws_label == "High (40-80%)" ~ 4,
+      bws_label %in% c("Extremely High (>80%)", "Arid and Low Water Use") ~ 5
+    )
+  ) |>
+  select(bws_raw, bws_n, bws_label, geometry = Shape)
+```
+
+#### 3.1.2. Water Depletion
+
+```{r}
+wdp_reclass <- matrix(
+  c(
+    0,NA,
+    1,1, # <=5% annual depletion
+    2,2, # >5–25% annual depletion
+    5,3, # >25–75% annual depletion, Dry-Year
+    6,4, # >25–75% annual depletion, Seasonal
+    7,5, # >75–100% annual depletion
+    8,5  # >100% annual depletion
+  ),
+  ncol=2, byrow=TRUE
+)
+```
+
+```{r}
+wdp_n <- wdp |>
+  classify(wdp_reclass) |> 
+  exact_extract(h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE) 
+
+skim(wdp_n)
+```
+
+```{r}
+wdp_n <- wdp_n |>
+  mutate(
+    wdp_raw = median,
+    wdp_n = round(median),
+    wdp_label = case_when(
+      wdp_n == 1 ~ "<=5% annual depletion",
+      wdp_n == 2 ~ ">5–25% annual depletion",
+      wdp_n == 3 ~ ">25–75% annual depletion, Dry-Year",
+      wdp_n == 4 ~ ">25–75% annual depletion, Seasonal",
+      wdp_n == 5 ~ ">75% annual depletion"
+    )
+  ) |>
+  select(HYBAS_ID, wdp_raw:wdp_label)
+```
+
+#### 3.1.3. Blue Water Scarcity
+
+```{r}
+wsb_n <- exact_extract(wsb, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(wsb_n)
+```
+
+```{r}
+wsb_n <- wsb_n |>
+  mutate(
+    wsb_raw = median,
+    wsb_n = case_when(
+      median <= 0.2 ~ 1,
+      between(median, 0.2, 1.0) ~ 2,
+      between(median, 1.0, 2.0) ~ 3,
+      between(median, 2.0, 5.0) ~ 4,
+      median > 5.0 ~ 5
+    ),
+    wsb_label = case_when(
+      wsb_n == 1 ~ "Very Low Blue Water Scarcity (<=0.2)",
+      wsb_n == 2 ~ "Low Blue Water Scarcity (>0.2-1.0)",
+      wsb_n == 3 ~ "Moderate Blue Water Scarcity (>1.0-2.0)",
+      wsb_n == 4 ~ "Significant Blue Water Scarcity (>2.0-5.0)",
+      wsb_n == 5 ~ "Severe Blue Water Scarcity (>5.0)"
+    )
+  ) |>
+  select(HYBAS_ID, wsb_raw:wsb_label)
+```
+
+#### 3.1.4. Join datasets and Export
+
+```{r}
+wa_n <- h6 |>
+  st_join(bws_n, largest = TRUE) |>
+  left_join(wdp_n, by = "HYBAS_ID") |>
+  left_join(wsb_n, by = "HYBAS_ID")
+```
+
+```{r}
+write_rds(wa_n, here("outputs", "wa_n_v1_1.rds"))
+```
+
+### 3.2. Water Pollution
+
+#### 3.2.1. Coastal Eutrophication Potential
+
+```{r}
+cep_n <- cep |>
+  mutate(
+    cep_raw = na_if(cep_raw, -9999),
+    cep_raw = na_if(cep_raw, 9999),
+    cep_n = case_when(
+      cep_label == "Low (<-5)" ~ 1,
+      cep_label == "Low - Medium (-5 to 0)" ~ 2,
+      cep_label == "Medium - High (0 to 1)" ~ 3,
+      cep_label == "High (1 to 5)" ~ 4,
+      cep_label == "Extremely High (>5)" ~ 5
+    )
+  ) |>
+  select(cep_raw, cep_n, cep_label, geometry = Shape)
+```
+
+#### 3.2.2. Nitrate-Nitrite Concentration
+
+*Get mean predicted values between 2006 and 2010, then rasterize*
+```{r}
+nox <- nox_csv |>
+  filter(year >= 2006) |>
+  group_by(OBJECTID) |>
+  summarise(value = mean(preds)) |>
+  right_join(sp_grid, by = "OBJECTID") |>
+  select(-OBJECTID) |>
+  st_as_sf(coords = c("Lon", "Lat"), crs = 4326) |>
+  st_rasterize(dx = 0.5, dy = 0.5) |>
+  rast()
+```
+
+```{r}
+nox_n <- exact_extract(nox, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(nox_n)
+```
+
+```{r}
+nox_n <- nox_n |>
+  mutate(
+    nox_raw = median,
+    nox_n = case_when(
+      median <= 0.4 ~ 1,
+      between(median, 0.4, 0.8) ~ 2,
+      between(median, 0.8, 1.2) ~ 3,
+      between(median, 1.2, 1.6) ~ 4,
+      median > 1.6 ~ 5
+    ),
+    nox_label = case_when(
+      nox_n == 1 ~ "Very Low Concentration (<=0.4)",
+      nox_n == 2 ~ "Low Concentration (>0.4-0.8)",
+      nox_n == 3 ~ "Moderate Concentration (>0.8-1.2)",
+      nox_n == 4 ~ "High Concentration (>1.2-1.6)",
+      nox_n == 5 ~ "Very High Concentration (>1.6)"
+    )
+  ) |>
+  select(HYBAS_ID, nox_raw:nox_label)
+```
+
+#### 3.2.3. Periphyton Growth Potential
+
+```{r}
+tnc_n <- exact_extract(tnc, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(tnc_n)
+```
+
+```{r}
+tpc_n <- exact_extract(tpc, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(tpc_n)
+```
+
+```{r}
+pgp_n <- tnc_n |>
+  select(HYBAS_ID, tnc_raw = median) |>
+  left_join(
+    select(tpc_n, HYBAS_ID, tpc_raw = median),
+    by = "HYBAS_ID" 
+  ) |>
+  mutate(
+    ratio_n_p = tnc_raw/tpc_raw,
+    limiting = if_else(ratio_n_p < 7, "N-limited", "P-limited"),
+    pgp_n = case_when(
+      limiting == "N-limited" & tnc_raw <= 0.4 ~ 1,
+      limiting == "N-limited" & between(tnc_raw, 0.4, 0.8) ~ 2,
+      limiting == "N-limited" & between(tnc_raw, 0.8, 1.2) ~ 3,
+      limiting == "N-limited" & between(tnc_raw, 1.2, 1.6) ~ 4,
+      limiting == "N-limited" & tnc_raw > 1.6 ~ 5,
+      
+      limiting == "P-limited" & tpc_raw <= 0.023 ~ 1,
+      limiting == "P-limited" & between(tpc_raw, 0.023, 0.046) ~ 2,
+      limiting == "P-limited" & between(tpc_raw, 0.046, 0.100) ~ 3,
+      limiting == "P-limited" & between(tpc_raw, 0.100, 0.150) ~ 4,
+      limiting == "P-limited" & tpc_raw > 0.150 ~ 5
+    ),
+    pgp_label = case_when(
+      limiting == "N-limited" & pgp_n == 1 ~ "N-limited growth acceptable",
+      limiting == "N-limited" & pgp_n == 2 ~ "N-limited growth acceptable",
+      limiting == "N-limited" & pgp_n == 3 ~ "N-limited growth undesirable",
+      limiting == "N-limited" & pgp_n == 4 ~ "N-limited growth undesirable",
+      limiting == "N-limited" & pgp_n == 5 ~ "N-limited growth undesirable",
+      
+      limiting == "P-limited" & pgp_n == 1 ~ "P-limited growth acceptable",
+      limiting == "P-limited" & pgp_n == 2 ~ "P-limited growth acceptable",
+      limiting == "P-limited" & pgp_n == 3 ~ "P-limited growth undesirable",
+      limiting == "P-limited" & pgp_n == 4 ~ "P-limited growth undesirable",
+      limiting == "P-limited" & pgp_n == 5 ~ "P-limited growth undesirable"
+    )
+  ) |>
+  select(HYBAS_ID, tnc_raw, tpc_raw, ratio_n_p, limiting, pgp_n, pgp_label)
+```
+
+#### 3.2.4. Join datasets and Export
+
+```{r}
+wp_n <- h6 |>
+  st_join(cep_n, largest = TRUE) |>
+  left_join(nox_n, by = "HYBAS_ID") |>
+  left_join(pgp_n, by = "HYBAS_ID")
+```
+
+```{r}
+write_rds(wp_n, here("outputs", "wp_n_v1_1.rds"))
+```
+
+## 4. Identify the value for the unified layer
+
+### 4.1. Max of Water Availability
+
+```{r}
+wa_n <- read_rds(here("outputs", "wa_n_v1_1.rds"))
+```
+
+```{r}
+son_wa <- wa_n |>
+  rowwise() |>
+  mutate(
+    wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_max = if_else(between(wa_max, 1, 5), wa_max, NA),
+    .after = region
+  ) |>
+  ungroup()
+```
+
+### 4.2. Max of Water Pollution
+
+```{r}
+wp_n <- read_rds(here("outputs", "wp_n_v1_1.rds"))
+```
+
+```{r}
+son_wp <- wp_n |>
+  rowwise() |>
+  mutate(
+    wp_max = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_max = if_else(between(wp_max, 1, 5), wp_max, NA),
+    .after = region
+  ) |>
+  ungroup()
+```
+
+## 5. Join final output
+
+```{r}
+son_water <- son_wa |>
+  left_join(
+    son_wp |> select(-c(WMOBB_id:region)) |> st_drop_geometry(),
+    by = "HYBAS_ID"
+  ) |>
+  relocate(geometry, .after = last_col())
+
+st_drop_geometry(son_water) |> skim()
+```
+
+```{r}
+son_water |> 
+  st_transform("EPSG:8857") |> 
+  st_simplify(dTolerance = 10000) |> 
+  st_transform(st_crs(son_water)) |> 
+  mutate(across(c(wa_max, wp_max), ~ as.factor(.x))) |> 
+  mapview(
+    layer.name = list("Max Water Availability", "Max Water Pollution"),
+    zcol = c("wa_max", "wp_max"),
+    col.regions = c("#FFFF99", "#FFE600", "#FF9900", "#FF1900", "#990000"),
+    lwd = 0.2,
+    alpha.regions = 0.9
+  )
+```
+
+## 6. Export
+
+```{r}
+write_rds(son_water, here("outputs", "sbtn_son_water_v1_1.rds"))
+```
+
+```{r}
+# st_write(son_water, here("outputs", "sbtn_son_water_v1_1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
+
+```{r}
+# write.xlsx(list(
+#   "SBTN SoN Water" = st_drop_geometry(son_water)
+# ), file = here("outputs", "sbtn_son_water_v1_1.xlsx"), rowNames = FALSE)
+```
