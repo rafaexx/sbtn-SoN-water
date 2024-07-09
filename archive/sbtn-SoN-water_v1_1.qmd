@@ -2,7 +2,7 @@
 title: "SBTN State of Nature Water unified layers"
 subtitle: "water availability and water pollution"
 author: "Rafael Camargo"
-date: "July 2, 2024"
+date: "Apr 12, 2024"
 engine: knitr
 format:
   html:
@@ -31,7 +31,7 @@ sf::sf_use_s2(FALSE) # due to issues in HydroBASINS geometries
 #### 2.1.1. Baseline Water Stress [Kuzma et al. 2023](https://www.wri.org/data/aqueduct-global-maps-40-data)
 
 ```{r}
-bws <- read_sf(here("inputs", "aqueduct40", "GDB", "Aq40_Y2023D07M05.gdb"), layer = "baseline_annual")
+bws <- st_read(here("inputs", "aqueduct40", "GDB", "Aq40_Y2023D07M05.gdb"), layer = "baseline_annual")
 ```
 
 #### 2.1.2. Water Depletion [Brauman et al. 2016](http://www.earthstat.org/water-depletion-watergap3-basins/)
@@ -40,10 +40,10 @@ bws <- read_sf(here("inputs", "aqueduct40", "GDB", "Aq40_Y2023D07M05.gdb"), laye
 wdp <- rast(here("inputs", "water_depletion", "WaterDepletionCat_WG3.tif"))
 ```
 
-#### 2.1.3. Blue Water Reduction [Hogeboom et al. 2024](https://data.4tu.nl/datasets/089afa18-bbd5-493e-8a6c-39e1ca7b2a59)
+#### 2.1.3. Blue Water Scarcity [Hoekstra & Mekonnen 2011](https://www.waterfootprint.org/resources/appendix/Report53_Appendix.zip)
 
 ```{r}
-bwr <- read_sf(here("inputs", "sbtn_freshwater_quantity_target_h5", "Freshwater Quantity Targets.shp"))
+wsb <- rast(here("inputs", "blue_water_scarcity", "raster", "ws_avg.tif"))
 ```
 
 ### 2.2. Water Pollution
@@ -167,28 +167,35 @@ wdp_n <- wdp_n |>
   select(HYBAS_ID, wdp_raw:wdp_label)
 ```
 
-#### 3.1.3. Blue Water Reduction
+#### 3.1.3. Blue Water Scarcity
 
 ```{r}
-bwr_n <- bwr |>
+wsb_n <- exact_extract(wsb, h6, fun = c("mean", "median", "quantile", "majority", "coefficient_of_variation"), quantiles = 0.75,
+                       append_cols = "HYBAS_ID", progress = TRUE)
+
+skim(wsb_n)
+```
+
+```{r}
+wsb_n <- wsb_n |>
   mutate(
-    bwr_raw = FQT_Annual,
-    bwr_n = case_when(
-      bwr_raw < 5 ~ 1,
-      bwr_raw < 25 ~ 2,
-      bwr_raw < 50 ~ 3,
-      bwr_raw < 80 ~ 4,
-      bwr_raw >= 80 ~ 5
+    wsb_raw = median,
+    wsb_n = case_when(
+      median <= 0.2 ~ 1,
+      between(median, 0.2, 1.0) ~ 2,
+      between(median, 1.0, 2.0) ~ 3,
+      between(median, 2.0, 5.0) ~ 4,
+      median > 5.0 ~ 5
     ),
-    bwr_label = case_when(
-      bwr_n == 1 ~ "Low (<5%)",
-      bwr_n == 2 ~ "Moderate (5-25%)",
-      bwr_n == 3 ~ "Significant (25-50%)",
-      bwr_n == 4 ~ "Severe (50-80%)",
-      bwr_n == 5 ~ "Extreme (>=80%)"
+    wsb_label = case_when(
+      wsb_n == 1 ~ "Very Low Blue Water Scarcity (<=0.2)",
+      wsb_n == 2 ~ "Low Blue Water Scarcity (>0.2-1.0)",
+      wsb_n == 3 ~ "Moderate Blue Water Scarcity (>1.0-2.0)",
+      wsb_n == 4 ~ "Significant Blue Water Scarcity (>2.0-5.0)",
+      wsb_n == 5 ~ "Severe Blue Water Scarcity (>5.0)"
     )
   ) |>
-  select(bwr_raw, bwr_n, bwr_label)
+  select(HYBAS_ID, wsb_raw:wsb_label)
 ```
 
 #### 3.1.4. Join datasets and Export
@@ -197,11 +204,11 @@ bwr_n <- bwr |>
 wa_n <- h6 |>
   st_join(bws_n, largest = TRUE) |>
   left_join(wdp_n, by = "HYBAS_ID") |>
-  st_join(bwr_n, largest = TRUE)
+  left_join(wsb_n, by = "HYBAS_ID")
 ```
 
 ```{r}
-write_rds(wa_n, here("outputs", "wa_n.rds"))
+write_rds(wa_n, here("outputs", "wa_n_v1_1.rds"))
 ```
 
 ### 3.2. Water Pollution
@@ -334,7 +341,7 @@ wp_n <- h6 |>
 ```
 
 ```{r}
-write_rds(wp_n, here("outputs", "wp_n.rds"))
+write_rds(wp_n, here("outputs", "wp_n_v1_1.rds"))
 ```
 
 ## 4. Identify the value for the unified layer
@@ -342,14 +349,14 @@ write_rds(wp_n, here("outputs", "wp_n.rds"))
 ### 4.1. Max of Water Availability
 
 ```{r}
-wa_n <- read_rds(here("outputs", "wa_n.rds"))
+wa_n <- read_rds(here("outputs", "wa_n_v1_1.rds"))
 ```
 
 ```{r}
 son_wa <- wa_n |>
   rowwise() |>
   mutate(
-    wa_max = max(c(bws_n, wdp_n, bwr_n), na.rm = TRUE),
+    wa_max = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
     wa_max = if_else(between(wa_max, 1, 5), wa_max, NA),
     .after = region
   ) |>
@@ -359,7 +366,7 @@ son_wa <- wa_n |>
 ### 4.2. Max of Water Pollution
 
 ```{r}
-wp_n <- read_rds(here("outputs", "wp_n.rds"))
+wp_n <- read_rds(here("outputs", "wp_n_v1_1.rds"))
 ```
 
 ```{r}
@@ -404,15 +411,15 @@ son_water |>
 ## 6. Export
 
 ```{r}
-write_rds(son_water, here("outputs", "sbtn_son_water_v2.rds"))
+write_rds(son_water, here("outputs", "sbtn_son_water_v1_1.rds"))
 ```
 
 ```{r}
-st_write(son_water, here("outputs", "sbtn_son_water_v2.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+# st_write(son_water, here("outputs", "sbtn_son_water_v1_1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
 ```
 
 ```{r}
-write.xlsx(list(
-  "SBTN SoN Water" = st_drop_geometry(son_water)
-), file = here("outputs", "sbtn_son_water_v2.xlsx"), rowNames = FALSE)
+# write.xlsx(list(
+#   "SBTN SoN Water" = st_drop_geometry(son_water)
+# ), file = here("outputs", "sbtn_son_water_v1_1.xlsx"), rowNames = FALSE)
 ```

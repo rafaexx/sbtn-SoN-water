@@ -1,0 +1,431 @@
+---
+title: "SBTN State of Nature Water unified layers"
+subtitle: "water availability and water pollution - National and Sub-national level, weighted by sector"
+author: "Rafael Camargo"
+date: "Jun 25, 2024"
+engine: knitr
+format:
+  html:
+    toc: true
+execute:
+  warning: false    
+---
+
+## 1. Setup
+
+Load required packages
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(here, dplyr, readr, readxl, sf, tidyr, terra, fasterize, purrr, exactextractr, skimr, mapview, openxlsx)
+```
+
+```{r}
+dir.create(here("outputs", "temp_raster"))
+```
+
+## 2. Load data
+
+```{r}
+son_water <- read_rds(here("outputs", "sbtn_son_water_v1_1.rds"))
+```
+
+```{r}
+aqueduct_adm0 <- read_excel(here("inputs", "aqueduct40", "Aqueduct40_country_rankings.xlsx"), sheet = "country_baseline")
+```
+
+```{r}
+aqueduct_adm1 <- read_excel(here("inputs", "aqueduct40", "Aqueduct40_country_rankings.xlsx"), sheet = "province_baseline")
+```
+
+```{r}
+onedrive_data <- "/Users/camargorafael/Library/CloudStorage/OneDrive-SharedLibraries-TheBostonConsultingGroup,Inc/Q-NC-Communities - G3S/3. Data"
+```
+
+*National level administrative division*
+
+```{r}
+adm0 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm0_100m.shp"))
+```
+
+*Sub-national level administrative division*
+
+```{r}
+adm1 <- read_sf(here(onedrive_data, "adm_divisions", "gadm_410_adm1_100m.shp"))
+```
+
+## 3. Rasterize SoN water layers
+
+```{r}
+fasterize_son_water <- function(var){
+  fasterize(son_water, raster(son_water, res = 0.01), field = var, fun = "max") |>
+    writeRaster(here("outputs", "temp_raster", paste0(var, ".tif")), overwrite = TRUE)
+}
+
+map(list("wdp_n", "wsb_n", "cep_n", "nox_n", "pgp_n"), fasterize_son_water)
+```
+
+```{r}
+list_wa <- list(
+  rast(here("outputs", "temp_raster", "wdp_n.tif")),
+  rast(here("outputs", "temp_raster", "wsb_n.tif"))
+) |> 
+  set_names("wdp_n", "wsb_n")
+```
+
+```{r}
+list_wp <- list(
+  rast(here("outputs", "temp_raster", "cep_n.tif")),
+  rast(here("outputs", "temp_raster", "nox_n.tif")),
+  rast(here("outputs", "temp_raster", "pgp_n.tif"))
+) |> 
+  set_names("cep_n", "nox_n", "pgp_n")
+```
+
+## 4. Prepare data to use as weights
+
+### 4.1. WaterGap3 water consumption as weights for water depletion (provided by the authors)
+
+```{r}
+waterGap3_consumption <- read_csv(
+  here("inputs", "water_depletion", "SectorConsumption_m3_annual.csv"),
+  col_names = c("subBas_ID", "domestic", "manufacturing", "electric", "irrigation", "livestock")
+)
+
+waterGap3_consumption <- read_sf(here("inputs", "water_depletion", "WaterGap3Shape", "WaterGap3_AllBasins.shp")) |>
+  dplyr::select(subBas_ID = ContUID) |>
+  inner_join(waterGap3_consumption, by = "subBas_ID") |>
+  mutate(
+    industrial = manufacturing + electric,
+    total = domestic + irrigation + livestock + industrial
+  ) |>
+  dplyr::select(
+    dom = domestic,
+    ind = industrial,
+    irr = irrigation,
+    liv = livestock,
+    tot = total
+  )
+
+fasterize_vars <- function(var){
+  fasterize(waterGap3_consumption, raster(waterGap3_consumption, res = 0.01), field = var, fun = "max") |>
+    writeRaster(here("outputs", "temp_raster", paste0("wdp_weight_", var, ".tif")), overwrite = TRUE)
+}
+
+map(list("dom", "ind", "irr", "liv", "tot"), fasterize_vars)
+```
+
+```{r}
+wdp_weights <- list.files(here(), pattern = "wdp_weight_", recursive = TRUE) |> 
+  map(rast) |> 
+  set_names("dom", "ind", "irr", "liv", "tot")
+```
+
+### 4.2. Water Footprint Network Blue water footprint as weights for blue water scarcity (provided by the authors)
+
+```{r}
+wsb_weights <- list(
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_agr_m3y", "w001001.adf")),
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_dom_m3y", "w001001.adf")),
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "sectoral", "wfbl_ind_m3y", "w001001.adf")),
+  rast(here("inputs", "blue_water_scarcity", "blue_water_footprint", "total", "wfbl_yr_30m", "w001001.adf"))
+) |> 
+  set_names("agr", "dom", "ind", "tot")
+```
+
+### 4.3. Global Cropland Extent (2019) [Potapov et al. 2021](https://glad.umd.edu/dataset/croplands)
+
+```{r}
+wp_weights <- rast(here("inputs", "global_cropland_extent", "Global_cropland_3km_2019.tif"))
+```
+
+## 5. Spatial aggregation to administrative divisions
+
+```{r}
+aggregate_to_adm <- function(indicator, weight_by, key, to_adm, adm_id){
+  exact_extract(indicator, to_adm, fun = "weighted_mean", weights = resample(weight_by, indicator), default_weight = 0, append_cols = adm_id, progress = TRUE) |> 
+    rename({{key}} := weighted_mean)
+} 
+```
+
+### 5.1. National level
+
+```{r}
+bws_adm0 <- aqueduct_adm0 |> 
+  filter(indicator_name == "bws") |> 
+  mutate(
+    weight = if_else(weight == "One", "n", tolower(weight)),
+    score = na_if(score, -9999),
+    # rescale values 0-5 to 1-5 applying (new_max - new_min) * (x - min_old) / (max_old - min_old) + min_new
+    score = (5-1) * ((score-0) / (5-0)) + 1 
+  ) |> 
+  select(GID_0 = gid_0, weight, score) |> 
+  pivot_wider(names_from = weight, values_from = score, names_prefix = "bws_") |> 
+  relocate(GID_0, bws_n, bws_dom, bws_ind, bws_irr, bws_liv, bws_tot)
+
+bws_adm0 <- bws_adm0 |> 
+  bind_rows(
+    filter(bws_adm0, GID_0 == "IND") |> mutate(GID_0 = "Z01"),
+    filter(bws_adm0, GID_0 == "CHN") |> mutate(GID_0 = "Z02"),
+    filter(bws_adm0, GID_0 == "CHN") |> mutate(GID_0 = "Z03"),
+    filter(bws_adm0, GID_0 == "IND") |> mutate(GID_0 = "Z04"),
+    filter(bws_adm0, GID_0 == "IND") |> mutate(GID_0 = "Z05"),
+    filter(bws_adm0, GID_0 == "PAK") |> mutate(GID_0 = "Z06"),
+    filter(bws_adm0, GID_0 == "IND") |> mutate(GID_0 = "Z07"),
+    filter(bws_adm0, GID_0 == "CHN") |> mutate(GID_0 = "Z08"),
+    filter(bws_adm0, GID_0 == "IND") |> mutate(GID_0 = "Z09")
+  )
+```
+
+```{r}
+son_water_adm0 <- adm0 |>
+  # baseline water stress (bws)
+  left_join(bws_adm0, by = "GID_0") |> 
+  # water depletion (wdp)
+  left_join(exact_extract(list_wa$wdp_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(wdp_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$dom, wdp_dom, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$ind, wdp_ind, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$irr, wdp_irr, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$liv, wdp_liv, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$tot, wdp_tot, adm0, "GID_0"), by = "GID_0") |>
+  # blue water scarcity (wsb)
+  left_join(exact_extract(list_wa$wsb_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(wsb_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$agr, wsb_agr, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$dom, wsb_dom, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$ind, wsb_ind, adm0, "GID_0"), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm0, "GID_0"), by = "GID_0") |> 
+  # coastal eutrophication potential (cep)
+  left_join(exact_extract(list_wp$cep_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(cep_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wp$cep_n, wp_weights, cep_agr, adm0, "GID_0"), by = "GID_0") |>
+  # nitrate-nitrite concentration (nox)
+  left_join(exact_extract(list_wp$nox_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(nox_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wp$nox_n, wp_weights, nox_agr, adm0, "GID_0"), by = "GID_0") |>
+  # periphyton growth potential (pgp)
+  left_join(exact_extract(list_wp$pgp_n, adm0, fun = "mean", append_cols = "GID_0", progress = TRUE) |> rename(pgp_n = mean), by = "GID_0") |>
+  left_join(aggregate_to_adm(list_wp$pgp_n, wp_weights, pgp_agr, adm0, "GID_0"), by = "GID_0") |>
+  
+  mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
+  rowwise() |> 
+  mutate(
+    wa_max_n = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_max_dom = max(c(bws_dom, wdp_dom, wsb_dom), na.rm = TRUE),
+    wa_max_ind = max(c(bws_ind, wdp_ind, wsb_ind), na.rm = TRUE),
+    wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
+    wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
+    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
+    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_max_agr = max(c(cep_agr, nox_agr, pgp_agr), na.rm = TRUE)
+  ) |> 
+  ungroup() |> 
+  relocate(wa_max_n:wa_max_tot, .before = bws_n) |>
+  relocate(wp_max_n:wp_max_agr, .before = cep_n) |> 
+  relocate(geometry, .after = last_col()) |> 
+  mutate(across(where(is.numeric), ~ if_else(between(.x, 1, 5), .x, NA)))
+```
+
+```{r}
+st_drop_geometry(son_water_adm0) |> 
+  skim()
+```
+
+### 5.2. Sub-National level
+
+```{r}
+bws_adm1 <- aqueduct_adm1 |> 
+  filter(indicator_name == "bws") |> 
+  mutate(
+    weight = if_else(weight == "One", "n", tolower(weight)),
+    score = na_if(score, -9999),
+    # rescale values 0-5 to 1-5 applying (new_max - new_min) * (x - min_old) / (max_old - min_old) + min_new
+    score = (5-1) * ((score-0) / (5-0)) + 1 
+  ) |> 
+  select(GID_1 = gid_1, weight, score) |> 
+  pivot_wider(names_from = weight, values_from = score, names_prefix = "bws_") |> 
+  relocate(GID_1, bws_n, bws_dom, bws_ind, bws_irr, bws_liv, bws_tot) |> 
+  mutate(GID_1 = case_when(
+    GID_1 == "IND.14_1" ~ "Z01.14_1",
+    GID_1 == "CHN.28_1" ~ "Z02.28_1",
+    GID_1 == "CHN.29_1" ~ "Z03.29_1",
+    GID_1 == "IND.13_1" ~ "Z04.13_1",
+    GID_1 == "IND.35_1" ~ "Z05.35_1",
+    GID_1 == "PAK.1_1" ~ "Z06.1_1",
+    GID_1 == "PAK.6_1" ~ "Z06.6_1",
+    GID_1 == "IND.3_1" ~ "Z07.3_1",
+    .default = GID_1
+  ))
+
+bws_adm1 <- bws_adm1 |> 
+  bind_rows(
+    filter(bws_adm1, GID_1 == "Z02.28_1") |> mutate(GID_1 = "Z03.28_1"),
+    filter(bws_adm1, GID_1 == "Z03.29_1") |> mutate(GID_1 = "Z08.29_1"),
+    filter(bws_adm1, GID_1 == "Z04.13_1") |> mutate(GID_1 = "Z09.13_1"),
+    filter(bws_adm1, GID_1 == "Z05.35_1") |> mutate(GID_1 = "Z09.35_1")
+  )
+```
+
+```{r}
+son_water_adm1 <- adm1 |>
+  # baseline water stress (bws)
+  left_join(bws_adm1, by = "GID_1") |> 
+  # water depletion (wdp)
+  left_join(exact_extract(list_wa$wdp_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(wdp_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$dom, wdp_dom, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$ind, wdp_ind, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$irr, wdp_irr, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$liv, wdp_liv, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wdp_n, wdp_weights$tot, wdp_tot, adm1, "GID_1"), by = "GID_1") |>
+  # blue water scarcity (wsb)
+  left_join(exact_extract(list_wa$wsb_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(wsb_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$agr, wsb_agr, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$dom, wsb_dom, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$ind, wsb_ind, adm1, "GID_1"), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wa$wsb_n, wsb_weights$tot, wsb_tot, adm1, "GID_1"), by = "GID_1") |> 
+  # coastal eutrophication potential (cep)
+  left_join(exact_extract(list_wp$cep_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(cep_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wp$cep_n, wp_weights, cep_agr, adm1, "GID_1"), by = "GID_1") |>
+  # nitrate-nitrite concentration (nox)
+  left_join(exact_extract(list_wp$nox_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(nox_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wp$nox_n, wp_weights, nox_agr, adm1, "GID_1"), by = "GID_1") |>
+  # periphyton growth potential (pgp)
+  left_join(exact_extract(list_wp$pgp_n, adm1, fun = "mean", append_cols = "GID_1", progress = TRUE) |> rename(pgp_n = mean), by = "GID_1") |>
+  left_join(aggregate_to_adm(list_wp$pgp_n, wp_weights, pgp_agr, adm1, "GID_1"), by = "GID_1") |>
+  
+  mutate(across(where(is.numeric), ~ round(.x, 1))) |> 
+  rowwise() |> 
+  mutate(
+    wa_max_n = max(c(bws_n, wdp_n, wsb_n), na.rm = TRUE),
+    wa_max_dom = max(c(bws_dom, wdp_dom, wsb_dom), na.rm = TRUE),
+    wa_max_ind = max(c(bws_ind, wdp_ind, wsb_ind), na.rm = TRUE),
+    wa_max_irr = max(c(bws_irr, wdp_irr, wsb_agr), na.rm = TRUE),
+    wa_max_liv = max(c(bws_liv, wdp_liv, wsb_n), na.rm = TRUE),
+    wa_max_tot = max(c(bws_tot, wdp_tot, wsb_tot), na.rm = TRUE),
+    wp_max_n = max(c(cep_n, nox_n, pgp_n), na.rm = TRUE),
+    wp_max_agr = max(c(cep_agr, nox_agr, pgp_agr), na.rm = TRUE)
+  ) |> 
+  ungroup() |> 
+  relocate(wa_max_n:wa_max_tot, .before = bws_n) |>
+  relocate(wp_max_n:wp_max_agr, .before = cep_n) |> 
+  relocate(geometry, .after = last_col()) |> 
+  mutate(across(where(is.numeric), ~ if_else(between(.x, 1, 5), .x, NA)))
+```
+
+```{r}
+st_drop_geometry(son_water_adm1) |> 
+  skim()
+```
+
+## 6. Export
+
+```{r}
+key_descriptions <- tribble(
+  ~Key,    ~Description,     
+  "wa_max",    "Maximum value between water availability layers: bws, wdp, wsb", 
+  "wp_max",  "Maximum value between water pollution layers: cep, nox, pgp", 
+  "bws","Baseline Water Stress",     
+  "wdp","Water depletion",      
+  "wsb","Blue Water Scarcity",
+  "cep","Coastal Eutrophication Potential",
+  "nox","Nitrate-Nitrite Concentration",
+  "pgp","Periphyton Growth Potential",
+  "","",
+  "","",
+  "Suffix","Description",
+  "_n","Aggregation at administrative level, without weighting",
+  "_dom","Aggregation at administrative level weighted by domestic water demand*",
+  "_ind","Aggregation at administrative level weighted by industrial water demand*",
+  "_irr","Aggregation at administrative level weighted by irrigation water demand*",
+  "_liv","Aggregation at administrative level weighted by livestock water demand*",
+  "_tot","Aggregation at administrative level weighted by total water demand*",
+  "_agr","Aggregation at administrative level weighted by cropland extent**",
+  "","",
+  "", "* Data for 'water demand' differs depending on the indicator aggregated",
+  "bws","Water withdrawal from PCR-GLOBWB 2",
+  "wdp","Water consumption from WaterGAP 3",
+  "wsb","Blue water footprint from Water Footprint Network",
+  "", "** For the water pollution indicators we used cropland extend from Potapov et al. 2021 (https://www.nature.com/articles/s43016-021-00429-z)"
+)
+```
+
+```{r}
+write.xlsx(list(
+  "Help" = key_descriptions,
+  "National level" = st_drop_geometry(son_water_adm0) |> 
+    mutate(notes = if_else(GID_0 %in% c("RUS", "CAN", "CHN", "USA", "BRA", "AUS", "IND", "ARG", "KAZ", "DZA"),
+                           "Not recommended to be used. Average values for such large country are not representative. Use values from sub-national level instead.", NA)), 
+  "Sub-national level" = st_drop_geometry(son_water_adm1)
+), file = here("outputs", "adm_level", "sbtn_son_water_v1_1_adm_level.xlsx"), rowNames = FALSE)
+```
+
+*National level*
+
+```{r}
+write_rds(son_water_adm0, here("outputs", "adm_level", "sbtn_son_water_v1_1_adm0.rds"))
+```
+
+```{r}
+# st_write(son_water_adm0, here("outputs", "adm_level", "sbtn_son_water_v1_1_adm0.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
+
+*Sub-national level*
+
+```{r}
+write_rds(son_water_adm1, here("outputs", "adm_level", "sbtn_son_water_v1_1_adm1.rds"))
+```
+
+```{r}
+# st_write(son_water_adm1, here("outputs", "adm_level", "sbtn_son_water_v1_1_adm1.shp"), layer_options = "ENCODING=UTF-8", delete_layer = TRUE)
+```
+
+## 7. View outputs
+
+```{r}
+son_water_adm0 <- read_rds(here("outputs", "adm_level", "sbtn_son_water_v1_1_adm0.rds"))
+son_water_adm1 <- read_rds(here("outputs", "adm_level", "sbtn_son_water_v1_1_adm1.rds"))
+```
+
+```{r}
+mapview_custom <- function(data, layer_name, var){
+  mapview(
+    data,
+    layer.name = layer_name,
+    zcol = var,
+    col.regions = colorRampPalette(c("#FFFF99", "#FFE600", "#FF9900", "#FF1900", "#990000")),
+    at = c(1, 1.8, 2.6, 3.4, 4.2, 5),
+    lwd = 0.1
+  )
+}
+```
+
+*National level*
+
+```{r}
+son_water_adm0_simplified <- son_water_adm0 |> 
+  st_transform("EPSG:8857") |> 
+  st_simplify(dTolerance = 1000) |> 
+  st_transform("EPSG:4326")
+```
+
+```{r}
+mapview_custom(son_water_adm0_simplified, "Water Availability (Max)", "wa_max_tot")
+```
+
+```{r}
+mapview_custom(son_water_adm0_simplified, "Water Pollution (Max)", "wp_max_agr")
+```
+
+*Sub-national level*
+
+```{r}
+son_water_adm1_simplified <- son_water_adm1 |> 
+  st_transform("EPSG:8857") |> 
+  st_simplify(dTolerance = 1000) |> 
+  st_transform("EPSG:4326")
+```
+
+```{r}
+mapview_custom(son_water_adm1_simplified, "Water Availability (Max)", "wa_max_tot")
+```
+
+```{r}
+mapview_custom(son_water_adm1_simplified, "Water Pollution (Max)", "wp_max_agr")
+```
